@@ -165,6 +165,17 @@ input[type=range]{accent-color:var(--cyan);width:100%}
 .toast.err{border-color:rgba(255,93,108,.5)}
 @keyframes in{from{transform:translateY(8px);opacity:0}}
 /* stick map */
+.stage{overflow:hidden;cursor:default}
+.stage.zoomed{cursor:grab}
+.stage.panning{cursor:grabbing}
+.canvas{transform-origin:0 0;--inv:1}
+
+.zoombar{position:absolute;left:10px;top:10px;z-index:5;display:flex;align-items:center;gap:2px;background:rgba(6,10,15,.85);border:1px solid var(--line2);border-radius:4px;padding:2px}
+.zoombar button{background:transparent;border:0;color:var(--text);font:700 13px var(--mono);width:26px;height:24px;border-radius:3px}
+.zoombar button:hover{background:var(--cyan-d);color:var(--cyan)}
+.zoombar button.fit{width:auto;padding:0 8px;font-size:10px;letter-spacing:.08em}
+.zoombar span{font:600 10.5px var(--mono);color:var(--muted);min-width:42px;text-align:center}
+
 .maptools{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:10px}
 .tabs{display:inline-flex;border:1px solid var(--line2);border-radius:4px;overflow:hidden;margin-right:6px}
 .tabs button{background:var(--panel2);border:0;border-right:1px solid var(--line2);padding:6px 11px;font:600 11px var(--mono);letter-spacing:.06em;color:var(--muted)}
@@ -177,7 +188,7 @@ input[type=range]{accent-color:var(--cyan);width:100%}
 .canvas svg{width:min(340px,100%);height:auto}
 .canvas.placing{cursor:crosshair}
 .watermark{position:absolute;right:10px;bottom:8px;white-space:nowrap;font:10px var(--mono);color:var(--dim);letter-spacing:.08em;line-height:1.2}
-.pin{position:absolute;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+.pin{position:absolute;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
   font:700 10px/1 var(--mono);color:var(--amber);background:rgba(10,14,20,.88);border:1.5px solid rgba(255,181,71,.65);
   box-shadow:0 0 0 3px rgba(0,0,0,.35);transition:background .08s,box-shadow .08s,color .08s;cursor:default;z-index:2}
 .pin.hat{border-style:dashed;font-size:12px}
@@ -196,7 +207,7 @@ input[type=range]{accent-color:var(--cyan);width:100%}
 #tip .row{display:flex;gap:6px;margin-top:4px}
 #tip .t{font:600 11px var(--mono);color:var(--cyan);min-width:54px}
 #tip .muted{color:var(--muted)}
-.cluster{position:absolute;transform:translate(-50%,-50%);width:60px;height:60px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:2px;z-index:2}
+.cluster{position:absolute;width:60px;height:60px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:2px;z-index:2}
 .cluster .seg{display:grid;place-items:center;border-radius:4px;background:rgba(10,14,20,.9);border:1.5px solid rgba(255,181,71,.65);color:var(--amber);font:700 9px/1 var(--mono);transition:background .08s,box-shadow .08s}
 .cluster .seg.up{grid-area:1/2}.cluster .seg.left{grid-area:2/1}.cluster .seg.center{grid-area:2/2;border-radius:50%}.cluster .seg.right{grid-area:2/3}.cluster .seg.down{grid-area:3/2}
 .cluster .seg.unmapped{border-color:var(--dim);color:var(--dim)}
@@ -207,6 +218,7 @@ input[type=range]{accent-color:var(--cyan);width:100%}
 .placing .cluster{cursor:grab}
 .placing .cluster .x{display:block}
 .placehint .btn{margin-left:8px}
+.pin,.cluster{transform:translate(-50%,-50%) scale(var(--inv))}
 .placehint{margin-top:8px;font:12px var(--mono);color:var(--amber);min-height:18px}
 .card.xhl{border-color:rgba(255,181,71,.7);box-shadow:0 0 14px rgba(255,181,71,.2)}
 footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:center}
@@ -250,7 +262,7 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
       <button class="btn small" id="placeBtn" title="Press a button on your stick, then click where it is">Place pins</button>
       <button class="btn small" id="hatAddBtn" title="Set up a 4-way hat with center push (it reports as 5 buttons)">+ 5-way hat</button>
       <button class="btn small" id="photoBtn" title="Use a photo of your stick for this view">Photo…</button>
-      <select id="schemSel" title="Drawn outline for this view"><optgroup label="VKB Gladiator NXT EVO"><option value="evo-ot-side">Omni Throttle (whole)</option><option value="evo-scg-head">SCG grip head</option><option value="evo-base-front">EVO base (front)</option></optgroup><optgroup label="Generic"><option value="grip-front">Grip (front)</option><option value="grip-back">Grip (side)</option><option value="base">Base</option></optgroup></select>
+      <select id="schemSel" title="Drawn outline for this view"><optgroup label="VKB Gladiator NXT EVO"><option value="evo-ot-side">Omni Throttle (whole)</option><option value="evo-scg-head">SCG grip head</option><option value="evo-scg-side">SCG grip side (triggers)</option><option value="evo-base-front">EVO base (front)</option></optgroup><optgroup label="Generic"><option value="grip-front">Grip (front)</option><option value="grip-back">Grip (side)</option><option value="base">Base</option></optgroup></select>
       <button class="btn small" id="schemBtn" title="Remove the photo and use the drawing">Use drawing</button>
       <span class="spacer"></span>
       <button class="btn small" id="viewAdd">+ View</button>
@@ -258,7 +270,7 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
       <button class="btn small danger" id="viewDel">Remove</button>
       <input type="file" id="photoFile" accept="image/png,image/jpeg,image/webp" hidden>
     </div>
-    <div class="stage"><div class="canvas" id="canvas"></div><div class="watermark" id="watermark">schematic · add a photo for exact positions</div></div>
+    <div class="stage" id="stage"><div class="zoombar"><button id="zOut" title="Zoom out">−</button><span id="zLvl">100%</span><button id="zIn" title="Zoom in (or mouse wheel)">+</button><button class="fit" id="zFit" title="Show the whole picture">FIT</button></div><div class="canvas" id="canvas"></div><div class="watermark" id="watermark">schematic · add a photo for exact positions</div></div>
     <div class="placehint" id="placeHint"></div>
     <h3>Axes</h3>
     <div class="axes" id="physAxes"><span class="hint">waiting for the daemon…</span></div>
@@ -609,6 +621,20 @@ const SCHEM = {
     <path d="M140 84 v-8 M140 152 v8 M106 118 h-8 M174 118 h8 M262 74 v-8 M262 142 v8 M228 108 h-8 M296 108 h8 M204 162 v-8 M204 230 v8 M170 196 h-8 M238 196 h8" stroke="#26364a" stroke-width="2"/>
     <circle cx="282" cy="196" r="13" fill="#3a1c1f" stroke="#b5474f" stroke-width="1.8"/>
     <path d="M200 320 L200 470" stroke="#1b2632" stroke-width="2"/></svg>`,
+  "evo-scg-side": `<svg viewBox="0 0 400 500" aria-hidden="true">
+    <defs><linearGradient id="sd" x1="0" x2="1"><stop offset="0" stop-color="#1c2a37"/><stop offset="1" stop-color="#0c131b"/></linearGradient></defs>
+    <ellipse cx="212" cy="470" rx="88" ry="14" fill="none" stroke="#26364a" stroke-width="2"/>
+    <rect x="146" y="438" width="132" height="22" rx="5" fill="#111b25" stroke="#33465c" stroke-width="2"/>
+    <path d="M156 438 L150 392 Q140 378 150 366 Q140 352 150 338 Q140 324 150 310 L156 214
+             Q130 196 116 176 Q98 146 108 112 Q120 66 176 54 Q236 44 276 66 Q306 86 302 130 Q298 170 278 200
+             Q266 260 270 330 Q272 390 268 438 Z" fill="url(#sd)" stroke="#33465c" stroke-width="2"/>
+    <path d="M168 56 q8 -14 22 -4 M222 50 q10 -14 24 -2" fill="none" stroke="#3a5068" stroke-width="2"/>
+    <path d="M118 178 Q96 182 88 196 Q92 206 106 202 L126 194" fill="#3a1c1f" stroke="#b5474f" stroke-width="1.8"/>
+    <path d="M154 222 Q120 226 110 250 Q106 276 124 286 Q132 274 136 262 Q140 246 154 244" fill="#3a1c1f" stroke="#b5474f" stroke-width="1.8"/>
+    <circle cx="150" cy="226" r="3" fill="#5b7590"/>
+    <circle cx="218" cy="238" r="15" fill="#16222e" stroke="#3a5068" stroke-width="1.5"/><circle cx="218" cy="238" r="6" fill="#26364a"/>
+    <path d="M190 120 Q214 104 240 116" fill="none" stroke="#26364a" stroke-width="1.5" stroke-dasharray="3 4"/>
+    <path d="M286 220 Q296 300 290 380" fill="none" stroke="#1b2632" stroke-width="2"/></svg>`,
   "evo-base-front": `<svg viewBox="0 0 400 500" aria-hidden="true">
     <defs><linearGradient id="bf" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1a2733"/><stop offset="1" stop-color="#0b1219"/></linearGradient></defs>
     <rect x="182" y="120" width="36" height="120" fill="#141f2a" stroke="#33465c" stroke-width="2" stroke-dasharray="0 36 120 300"/>
@@ -685,7 +711,7 @@ function renderMap() {
   $("#schemSel").value = v.schematic; $("#schemSel").hidden = !!v.image; $("#schemBtn").hidden = !v.image;
   $("#placeBtn").classList.toggle("on", !!placing); $("#placeBtn").textContent = placing ? "Done placing" : "Place pins";
   const cv = $("#canvas"); cv.textContent = ""; cv.classList.toggle("placing", !!placing);
-  if (v.image) { const img = el("img"); img.alt = v.name; img.src = `/api/image/${encodeURIComponent(v.image)}?t=${encodeURIComponent(TOKEN)}`; img.draggable = false; cv.append(img); }
+  if (v.image) { const img = el("img"); img.alt = v.name; img.onload = applyZoom; img.src = `/api/image/${encodeURIComponent(v.image)}?t=${encodeURIComponent(TOKEN)}`; img.draggable = false; cv.append(img); }
   else { cv.insertAdjacentHTML("beforeend", SCHEM[v.schematic] || SCHEM["evo-ot-side"]); }
   $("#watermark").hidden = !!v.image;
   const rev = reverseMap(), pins = layout.pins[v.id] || {};
@@ -708,6 +734,7 @@ function renderMap() {
   cv.classList.toggle("placing", !!placing || !!wizard);
   $("#hatAddBtn").classList.toggle("on", !!wizard);
   if (wizard) updateWizardHint(); else updatePlaceHint();
+  applyZoom();
   if (live) updateMapLive(live);
 }
 
@@ -768,7 +795,7 @@ function detectPlacing(m) {
   for (const [k, pin] of Object.entries(refs.pins || {})) pin.classList.toggle("xhl", k === placing.pending);
 }
 $("#canvas").addEventListener("click", e => {
-  if (e.target.closest(".pin, .cluster")) return;
+  if (suppressClick || e.target.closest(".pin, .cluster")) return;
   const r = $("#canvas").getBoundingClientRect();
   const xy = [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height].map(c => Math.max(0, Math.min(1, +c.toFixed(4))));
   if (wizard && wizard.step >= CL_DIRS.length) { finishWizard(xy); return; }
@@ -814,12 +841,67 @@ $("#viewAdd").onclick = async () => {
   layout.views.push({id, name: name.slice(0, 30), schematic: curView().schematic, image: null}); viewId = id; saveLayout(); renderMap();
 };
 $("#viewRen").onclick = async () => { const v = curView(), n = await ask("Rename view", "", v.name); if (!n) return; v.name = n.slice(0, 30); saveLayout(); renderMap(); };
+$("#zFit").title = "Show the whole picture";
 $("#viewDel").onclick = async () => {
   if (layout.views.length < 2) { toast("You need at least one view", true); return; }
   const v = curView(); if (!await ask("Remove view", `Remove “${v.name}” and its pins${v.image ? " and photo" : ""}?`, "", false)) return;
   layout.views = layout.views.filter(x => x.id !== v.id); delete layout.pins[v.id]; if (layout.clusters) delete layout.clusters[v.id]; viewId = layout.views[0].id; saveLayout(true); renderMap();
 };
 document.addEventListener("keydown", e => { if (e.key === "Escape" && wizard) stopWizard(); else if (e.key === "Escape" && placing) stopPlacing(); });
+
+// ---------- zoom & pan ----------
+const zoomByView = {};
+let panState = null, suppressClick = false;
+const Z_MIN = 1, Z_MAX = 8;
+function zstate() { return zoomByView[viewId] ||= {z: 1, tx: 0, ty: 0}; }
+function clampZoom(zs) {
+  const cv = $("#canvas"), W = cv.offsetWidth, H = cv.offsetHeight;
+  zs.z = Math.max(Z_MIN, Math.min(Z_MAX, zs.z));
+  zs.tx = Math.min(0, Math.max(W - zs.z * W, zs.tx));
+  zs.ty = Math.min(0, Math.max(H - zs.z * H, zs.ty));
+}
+function applyZoom() {
+  if (!layout) return;
+  const zs = zstate(), cv = $("#canvas"); clampZoom(zs);
+  cv.style.transform = `translate(${zs.tx}px, ${zs.ty}px) scale(${zs.z})`;
+  cv.style.setProperty("--inv", (1 / zs.z).toFixed(4));
+  $("#zLvl").textContent = Math.round(zs.z * 100) + "%";
+  $("#stage").classList.toggle("zoomed", zs.z > 1.001);
+}
+function zoomAt(sx, sy, factor) {
+  // sx/sy: point in stage coordinates that should stay put
+  const zs = zstate(), cv = $("#canvas");
+  const wx = (sx - cv.offsetLeft - zs.tx) / zs.z, wy = (sy - cv.offsetTop - zs.ty) / zs.z;
+  zs.z = Math.max(Z_MIN, Math.min(Z_MAX, zs.z * factor));
+  zs.tx = sx - cv.offsetLeft - zs.z * wx; zs.ty = sy - cv.offsetTop - zs.z * wy;
+  applyZoom();
+}
+function stageCenter() { const cv = $("#canvas"); return [cv.offsetLeft + cv.offsetWidth / 2, cv.offsetTop + cv.offsetHeight / 2]; }
+$("#stage").addEventListener("wheel", e => {
+  if (!layout) return;
+  e.preventDefault();
+  const r = $("#stage").getBoundingClientRect();
+  zoomAt(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.25 : 0.8);
+}, {passive: false});
+$("#zIn").onclick = () => zoomAt(...stageCenter(), 1.5);
+$("#zOut").onclick = () => zoomAt(...stageCenter(), 1 / 1.5);
+$("#zFit").onclick = () => { zoomByView[viewId] = {z: 1, tx: 0, ty: 0}; applyZoom(); };
+$("#stage").addEventListener("pointerdown", e => {
+  if (e.button !== 0 || e.target.closest(".pin, .cluster, .zoombar") || zstate().z <= 1.001) return;
+  const zs = zstate(); panState = {x: e.clientX, y: e.clientY, tx: zs.tx, ty: zs.ty, moved: false, id: e.pointerId};
+});
+window.addEventListener("pointermove", e => {
+  if (!panState || e.pointerId !== panState.id) return;
+  const dx = e.clientX - panState.x, dy = e.clientY - panState.y;
+  if (!panState.moved && Math.hypot(dx, dy) < 4) return;   // small moves are still clicks
+  panState.moved = true; $("#stage").classList.add("panning");
+  const zs = zstate(); zs.tx = panState.tx + dx; zs.ty = panState.ty + dy; applyZoom();
+});
+window.addEventListener("pointerup", e => {
+  if (!panState || e.pointerId !== panState.id) return;
+  if (panState.moved) { suppressClick = true; setTimeout(() => suppressClick = false, 0); }
+  panState = null; $("#stage").classList.remove("panning");
+});
 
 // ---------- multi-way hats (button clusters) ----------
 const CL_DIRS = ["up", "right", "down", "left", "center"];
@@ -944,7 +1026,7 @@ function connect() {
   try {
     const [r, l] = await Promise.all([api("GET", "/api/mapping"), api("GET", "/api/layout")]);
     mapping = r.mapping; layout = l.layout;
-    if (l.api !== 2) {  // page updated on disk but an older mapper server is still running
+    if (l.api !== 3) {  // page updated on disk but an older mapper server is still running
       layout = null;
       for (const sel of [".maptools", ".stage"]) document.querySelector(sel).hidden = true;
       $("#placeHint").textContent = "Stick map unavailable: restart HOTAS Mapper (an older version is still running).";

@@ -96,8 +96,10 @@ A local page opens in your browser:
 - **Stick map:** a picture of your stick with a pin on each button. Pins glow when pressed and are
   tagged with what they drive; hover one for details, and its game-button card lights up (and vice
   versa). Click **Place pins**, press a button on the stick, then click where it is (drag to adjust,
-  × to remove). The default views are drawings of the Gladiator NXT EVO Omni Throttle (whole
-  stick, SCG grip head, base front); generic outlines are available for other sticks. Add your own
+  × to remove). Zoom with the mouse wheel or the −/+ buttons (up to 8×) and drag to pan; pins
+  keep their size on screen, so small hats are easy to hit, and **FIT** shows the whole picture.
+  The default views are drawings of the Gladiator NXT EVO Omni Throttle (whole stick, SCG grip
+  head, triggers in side profile, base front); generic outlines are available for other sticks. Add your own
   views, and swap any drawing for a photo of your stick with **Photo…** (PNG/JPEG/WebP, up to
   10 MB). VKB button numbering depends on grip and firmware profile, so pins are placed by you
   rather than pre-filled.
@@ -122,7 +124,8 @@ exits about 45 s after its last tab closes.
 After updating (re-running `sudo ./install.sh`), close HOTAS Mapper and reopen it once it
 has exited. An older mapper still running would serve the new page, so the page detects
 that and disables the stick map until you restart. Stick maps saved before an update keep
-their views and drawings; pick a new drawing per view from the dropdown next to **Photo…**.
+their views and drawings: pick a new drawing per view from the dropdown next to **Photo…**, or
+add a view with **+ View** (e.g. one using "SCG grip side (triggers)").
 
 ## Configuration
 

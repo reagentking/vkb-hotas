@@ -41,7 +41,7 @@ CTL = os.environ.get("VKB_HOTAS_CTL", "/run/vkb-hotas/ctl.sock")
 PAGE = os.path.join(HERE, "vkb-mapper.html")
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "vkb-mapper")
 IDLE_EXIT = 45  # seconds without any open UI before the server quits
-API_VERSION = 2  # bump when the page needs server features; the page refuses to edit layouts on a mismatch
+API_VERSION = 3  # bump when the page needs server features; the page refuses to edit layouts on a mismatch
 
 
 def initial_mapping():
@@ -72,11 +72,12 @@ def initial_mapping():
 # Pin keys: physical button numbers ("1".."128") or "hat" (the stick's real hat); coordinates
 # are 0..1 fractions. Clusters are multi-way hats that report as separate buttons (VKB's 4-way
 # hats with center push); each direction is learned by pressing it.
-SCHEMATICS = ("evo-ot-side", "evo-scg-head", "evo-base-front", "grip-front", "grip-back", "base")
+SCHEMATICS = ("evo-ot-side", "evo-scg-head", "evo-scg-side", "evo-base-front", "grip-front", "grip-back", "base")
 CLUSTER_DIRS = ("up", "right", "down", "left", "center")
 DEFAULT_LAYOUT = {"version": 1, "views": [
     {"id": "stick", "name": "Whole stick", "schematic": "evo-ot-side", "image": None},
     {"id": "head", "name": "Grip head", "schematic": "evo-scg-head", "image": None},
+    {"id": "side", "name": "Triggers", "schematic": "evo-scg-side", "image": None},
     {"id": "base", "name": "Base front", "schematic": "evo-base-front", "image": None}],
     "pins": {}, "clusters": {}}
 IMAGE_TYPES = {b"\x89PNG\r\n\x1a\n": "png", b"\xff\xd8\xff": "jpg"}

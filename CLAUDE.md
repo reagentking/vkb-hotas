@@ -144,7 +144,8 @@ guards, and keeps them:
 - **`API_VERSION` handshake:** the page is re-read from disk on every request, so after a reinstall
   a still-running old server serves the new page. On a mismatch the page disables the stick map,
   because an old server would drop fields it doesn't know when saving. Bump `API_VERSION` (and the
-  page's check) whenever the page relies on new server behaviour.
+  page's check) whenever the page relies on new server behaviour. History: 2 = clusters and `evo-*`
+  drawings; 3 = `evo-scg-side` (an older server would silently swap unknown drawings on save).
 - The page is one self-contained file (CSP forbids external resources). Physical inputs are amber
   and emulated/game outputs are cyan.
 - **Stick map:** layout and photos are owned by the mapper server alone; the daemon never reads them.
@@ -164,10 +165,17 @@ guards, and keeps them:
     capped at 10 MB, and saving a layout deletes images no view references.
   - **Drawings:** the drawn schematics are inline SVGs in the page (viewBox 400×500).
     - `evo-*` are original line drawings of the Gladiator NXT EVO Omni Throttle, made from product
-      photos: whole stick with the OTA bracket and grip tilted 38°, SCG grip head, base front.
+      photos: whole stick with the OTA bracket and grip tilted 38°, SCG grip head, SCG grip side
+      (rapid-fire paddle above the dual-stage trigger, mini-stick), base front.
     - `grip-front` / `grip-back` / `base` are generic outlines for other sticks.
     - Pins are always placed by the user, never pre-filled, because button numbering differs per
       grip and firmware.
+  - **Zoom/pan:** a CSS transform on `#canvas` (origin 0 0, clamped so the picture covers its
+    box). Pins and clusters counter-scale via `--inv`, so they keep their screen size.
+    - Click fractions come from the transformed `getBoundingClientRect()`, so placement and
+      dragging need no zoom math.
+    - A drag of more than 4 px on empty stage pans, and the click that follows it is suppressed.
+    - Zoom state is per view, for the session only.
   - **Defaults only apply to new layouts:** `DEFAULT_LAYOUT` is used only when no `layout.json`
     exists. Existing layouts keep their views and drawings.
 
