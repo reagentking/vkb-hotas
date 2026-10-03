@@ -136,6 +136,15 @@ input[type=range]{accent-color:var(--cyan);width:100%}
 .chip.on{background:var(--amber);color:#1b1205;box-shadow:0 0 10px rgba(255,181,71,.6)}
 .chip button{border:0;background:transparent;color:inherit;opacity:.6;padding:0 3px;font-size:12px;line-height:1}
 .chip button:hover{opacity:1}
+.chip{flex-wrap:wrap;max-width:100%;row-gap:1px}
+.chip .sl{white-space:nowrap}
+.chip .nm{order:10;flex-basis:100%;font:500 10.5px/1.25 var(--sans);color:var(--text);opacity:.9;padding-bottom:1px;overflow-wrap:anywhere}
+.chip .hb{font:600 10px var(--mono);color:var(--cyan);background:rgba(70,229,255,.1);border:1px solid rgba(70,229,255,.3);border-radius:3px;padding:0 4px;white-space:nowrap}
+.chip.on .nm{color:#1b1205}
+.chip.on .hb{color:#06303a;background:rgba(255,255,255,.35);border-color:transparent}
+.chip.named-able{cursor:pointer}
+.chip.named-able:hover{border-color:var(--amber)}
+.pb.named{border-style:solid;border-color:rgba(255,181,71,.35)}
 .none{font:11px var(--mono);color:var(--dim);letter-spacing:.08em}
 .acts{display:flex;gap:6px}
 .card.learning{border-color:var(--cyan);animation:learnpulse 1s ease-in-out infinite}
@@ -391,11 +400,41 @@ function compass(box, store) {
   for (const [t, k] of cells) { const s = el("span", k === "c" ? "c" : "", t); store[k] = s; box.append(s); }
 }
 
+// physical button names (layout.names) and 5-way hat membership
+const physName = n => (typeof n === "number" && layout?.names?.[n]) || "";
+function hatBadge(n) {
+  if (typeof n !== "number" || !layout) return "";
+  const o = clusterOf(n);
+  return o ? `${o.c.name} ${CL_GLYPH[o.dir]}` : "";
+}
+function describeSrc(s) {
+  // "BTN 11 (Thumb up · Hat 2 ▲)" for toasts and tooltips
+  const extra = [physName(s), hatBadge(s)].filter(Boolean).join(" · ");
+  return srcLabel(s) + (extra ? ` (${extra})` : "");
+}
+async function renamePhys(n) {
+  if (!layout) { toast("Button names need the stick map. Restart HOTAS Mapper if it says an older version is running.", true); return; }
+  const name = await ask(`Name button ${n}`, "Describe the physical button, e.g. “Trigger stage 1” or “Rapid-fire up”. Shared by all profiles; leave empty to clear.", physName(n));
+  if (name === null) return;
+  (layout.names ||= {});
+  if (name.trim()) layout.names[n] = name.trim().slice(0, 32); else delete layout.names[n];
+  saveLayout(); renderOutputs();
+}
+
 function sourceChips(list, onRemove) {
   const chips = el("div", "chips");
   if (!list.length) chips.append(el("span", "none", "UNASSIGNED"));
   list.forEach((s, i) => {
-    const c = el("span", "chip", srcLabel(s)); c.dataset.src = String(s);
+    const c = el("span", "chip"); c.dataset.src = String(s);
+    c.append(el("span", "sl", srcLabel(s)));
+    const nm = physName(s), hb = hatBadge(s);
+    if (nm) c.append(el("span", "nm", nm));
+    if (hb) c.append(el("span", "hb", hb));
+    if (typeof s === "number") {
+      c.classList.add("named-able");
+      c.title = `Button ${s}${nm ? ` “${nm}”` : ""}${hb ? `, part of ${hb}` : ""}. Click to ${nm ? "rename" : "name"} it.`;
+      c.onclick = e => { if (!e.target.closest("button")) renamePhys(s); };
+    }
     const x = el("button", null, "×"); x.title = "Remove"; x.onclick = () => onRemove(i);
     c.append(x); chips.append(c);
   });
@@ -438,7 +477,7 @@ function renderPhys() {
   }
   const pb = $("#physBtns"); pb.textContent = ""; refs.pb = [];
   const n = hello ? hello.device.buttons : 32;
-  for (let i = 1; i <= n; i++) { const b = el("div", "pb", String(i)); b.append(el("small")); refs.pb[i] = b; pb.append(b); }
+  for (let i = 1; i <= n; i++) { const b = el("div", "pb", String(i)); b.append(el("small")); b.ondblclick = () => renamePhys(i); refs.pb[i] = b; pb.append(b); }
   renderPhysTags();
 }
 
@@ -446,7 +485,9 @@ function renderPhysTags() {
   if (!mapping) return;
   const p = prof(), tags = {};
   for (const [kind, key] of outKeys(p)) for (const s of outList(p, kind, key)) if (typeof s === "number") (tags[s] ||= []).push(outName(kind, key));
-  refs.pb.forEach((b, i) => { if (!b) return; const t = tags[i] || []; b.lastChild.textContent = t.length ? "→" + t.join(",") : ""; b.classList.toggle("mapped", t.length > 0); b.title = t.length ? `Button ${i} drives ${t.join(", ")}` : `Button ${i}: not used`; });
+  refs.pb.forEach((b, i) => { if (!b) return; const t = tags[i] || []; b.lastChild.textContent = t.length ? "→" + t.join(",") : ""; b.classList.toggle("mapped", t.length > 0);
+    const nm = physName(i), hb = hatBadge(i); b.classList.toggle("named", !!nm);
+    b.title = `Button ${i}` + (nm ? ` “${nm}”` : "") + (hb ? ` (${hb})` : "") + (t.length ? `: drives ${t.join(", ")}` : ": not used") + ". Double-click to name it."; });
 }
 
 function renderAll() { renderProfileBar(); renderEmuAxes(); renderOutputs(); renderPhys(); renderMap(); }
@@ -523,7 +564,7 @@ function assign(kind, key, src, add) {
   }
   const list = outList(p, kind, key);
   if (add) { if (!list.includes(src)) list.push(src); } else list.splice(0, list.length, src);
-  toast(`${srcLabel(src)} → ${outName(kind, key)}` + (moved.length ? ` (moved off ${moved.join(", ")})` : ""));
+  toast(`${describeSrc(src)} → ${outName(kind, key)}` + (moved.length ? ` (moved off ${moved.join(", ")})` : ""));
   scheduleSave(); renderOutputs();
 }
 async function pulse(n) {
@@ -748,7 +789,7 @@ function updateMapLive(m) {
 // tooltip + cross highlighting
 function showTip(key, e) {
   const t = pinTargets(key, reverseMap()), tip = $("#tip"); tip.textContent = "";
-  tip.append(el("b", null, key === "hat" ? "Hat" : `Button ${key}`));
+  tip.append(el("b", null, key === "hat" ? "Hat" : `Button ${key}` + (physName(+key) ? ` · ${physName(+key)}` : "")));
   if (!t.length) tip.append(el("div", "muted", "Not mapped to anything the game sees."));
   for (const o of t) { const r = el("div", "row"); r.append(el("span", "t", (o.from ? o.from + " → " : "") + o.name), el("span", o.label ? "" : "muted", o.label || "no label")); tip.append(r); }
   tip.hidden = false; moveTip(e);
@@ -951,7 +992,7 @@ function finishWizard(xy) {
   // a button lives either in a cluster or as its own pin, not both
   let removed = 0;
   for (const pins of Object.values(layout.pins)) for (const b of Object.values(wizard.dirs)) if (pins[b]) { delete pins[b]; removed++; }
-  const name = wizard.name; wizard = null; saveLayout(); renderMap();
+  const name = wizard.name; wizard = null; saveLayout(); renderOutputs();
   toast(`${name} added` + (removed ? ` (replaced ${removed} single pin${removed > 1 ? "s" : ""})` : ""));
 }
 function renderClusters(cv, v, rev) {
@@ -966,13 +1007,13 @@ function renderClusters(cv, v, rev) {
     }
     box.append(el("span", "name", c.name));
     const x = el("button", "x", "×"); x.title = "Remove this hat"; x.onpointerdown = e => e.stopPropagation();
-    x.onclick = e => { e.stopPropagation(); layout.clusters[v.id] = layout.clusters[v.id].filter(k => k.id !== c.id); saveLayout(); renderMap(); };
+    x.onclick = e => { e.stopPropagation(); layout.clusters[v.id] = layout.clusters[v.id].filter(k => k.id !== c.id); saveLayout(); renderOutputs(); };
     box.append(x);
     box.onmouseenter = e => { showClusterTip(c, e); for (const b of Object.values(c.dirs)) crossHighlight(String(b), true); };
     box.onmousemove = e => moveTip(e);
     box.onmouseleave = () => { hideTip(); for (const b of Object.values(c.dirs)) crossHighlight(String(b), false); };
     box.onpointerdown = e => startClusterDrag(e, box, c);
-    box.ondblclick = async () => { hideTip(); const n = await ask("Rename hat", "", c.name); if (n) { c.name = n.slice(0, 24); saveLayout(); renderMap(); } };
+    box.ondblclick = async () => { hideTip(); const n = await ask("Rename hat", "", c.name); if (n) { c.name = n.slice(0, 24); saveLayout(); renderOutputs(); } };
     box.title = "Double-click to rename";
     cv.append(box);
   }
@@ -983,7 +1024,7 @@ function showClusterTip(c, e) {
   for (const d of CL_DIRS) {
     if (!(d in c.dirs)) continue;
     const t = rev[String(c.dirs[d])] || [], r = el("div", "row");
-    r.append(el("span", "t", `${CL_GLYPH[d]} BTN ${c.dirs[d]}`), el("span", t.length ? "" : "muted", t.length ? t.map(o => o.name + (o.label ? ` (${o.label})` : "")).join(", ") : "not mapped"));
+    r.append(el("span", "t", `${CL_GLYPH[d]} BTN ${c.dirs[d]}` + (physName(c.dirs[d]) ? ` ${physName(c.dirs[d])}` : "")), el("span", t.length ? "" : "muted", t.length ? t.map(o => o.name + (o.label ? ` (${o.label})` : "")).join(", ") : "not mapped"));
     tip.append(r);
   }
   tip.hidden = false; moveTip(e);
@@ -1026,7 +1067,7 @@ function connect() {
   try {
     const [r, l] = await Promise.all([api("GET", "/api/mapping"), api("GET", "/api/layout")]);
     mapping = r.mapping; layout = l.layout;
-    if (l.api !== 3) {  // page updated on disk but an older mapper server is still running
+    if (l.api !== 4) {  // page updated on disk but an older mapper server is still running
       layout = null;
       for (const sel of [".maptools", ".stage"]) document.querySelector(sel).hidden = true;
       $("#placeHint").textContent = "Stick map unavailable: restart HOTAS Mapper (an older version is still running).";

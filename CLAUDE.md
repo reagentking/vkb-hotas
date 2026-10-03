@@ -145,7 +145,8 @@ guards, and keeps them:
   a still-running old server serves the new page. On a mismatch the page disables the stick map,
   because an old server would drop fields it doesn't know when saving. Bump `API_VERSION` (and the
   page's check) whenever the page relies on new server behaviour. History: 2 = clusters and `evo-*`
-  drawings; 3 = `evo-scg-side` (an older server would silently swap unknown drawings on save).
+  drawings; 3 = `evo-scg-side` (an older server would silently swap unknown drawings on save);
+  4 = physical button `names`.
 - The page is one self-contained file (CSP forbids external resources). Physical inputs are amber
   and emulated/game outputs are cyan.
 - **Stick map:** layout and photos are owned by the mapper server alone; the daemon never reads them.
@@ -161,6 +162,12 @@ guards, and keeps them:
   - Clusters are visual only: the user chose to keep mapping per-button, with no "send cluster to
     game hat" shortcut.
   - A button belongs to a cluster or has its own pin, never both.
+  - `names` holds the user's names for physical buttons (keys 1–128, at most 32 characters).
+    - They describe hardware, so they live in the layout (shared across profiles), not in the
+      per-profile `labels`, which say what a button does in-game.
+    - The user chose this over a second per-card note.
+    - They're shown on card chips (a second line), with a 5-way hat badge from `clusterOf`, and in
+      tile and pin tooltips and toasts (`describeSrc`).
   - Image names are server-generated (`IMAGE_NAME` regex). Uploads are checked by magic bytes and
     capped at 10 MB, and saving a layout deletes images no view references.
   - **Drawings:** the drawn schematics are inline SVGs in the page (viewBox 400×500).

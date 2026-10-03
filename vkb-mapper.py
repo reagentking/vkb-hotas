@@ -41,7 +41,7 @@ CTL = os.environ.get("VKB_HOTAS_CTL", "/run/vkb-hotas/ctl.sock")
 PAGE = os.path.join(HERE, "vkb-mapper.html")
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "vkb-mapper")
 IDLE_EXIT = 45  # seconds without any open UI before the server quits
-API_VERSION = 3  # bump when the page needs server features; the page refuses to edit layouts on a mismatch
+API_VERSION = 4  # bump when the page needs server features; the page refuses to edit layouts on a mismatch
 
 
 def initial_mapping():
@@ -68,10 +68,12 @@ def initial_mapping():
 #    "views": [{"id": "stick", "name": "Whole stick", "schematic": "evo-ot-side", "image": null | "x-1a2b3c4d.jpg"}],
 #    "pins": {"stick": {"17": [0.42, 0.31], "hat": [0.5, 0.12]}},
 #    "clusters": {"head": [{"id": "c1", "name": "Hat 2", "xy": [0.3, 0.2],
-#                           "dirs": {"up": 11, "right": 12, "down": 13, "left": 14, "center": 15}}]}}
+#                           "dirs": {"up": 11, "right": 12, "down": 13, "left": 14, "center": 15}}]},
+#    "names": {"1": "Trigger stage 1", "21": "Rapid-fire up"}}
 # Pin keys: physical button numbers ("1".."128") or "hat" (the stick's real hat); coordinates
 # are 0..1 fractions. Clusters are multi-way hats that report as separate buttons (VKB's 4-way
-# hats with center push); each direction is learned by pressing it.
+# hats with center push); each direction is learned by pressing it. Names are the user's labels
+# for physical buttons (hardware, so shared by all profiles), shown wherever a button appears.
 SCHEMATICS = ("evo-ot-side", "evo-scg-head", "evo-scg-side", "evo-base-front", "grip-front", "grip-back", "base")
 CLUSTER_DIRS = ("up", "right", "down", "left", "center")
 DEFAULT_LAYOUT = {"version": 1, "views": [
@@ -79,7 +81,7 @@ DEFAULT_LAYOUT = {"version": 1, "views": [
     {"id": "head", "name": "Grip head", "schematic": "evo-scg-head", "image": None},
     {"id": "side", "name": "Triggers", "schematic": "evo-scg-side", "image": None},
     {"id": "base", "name": "Base front", "schematic": "evo-base-front", "image": None}],
-    "pins": {}, "clusters": {}}
+    "pins": {}, "clusters": {}, "names": {}}
 IMAGE_TYPES = {b"\x89PNG\r\n\x1a\n": "png", b"\xff\xd8\xff": "jpg"}
 IMAGE_MAX = 10 << 20
 IMAGE_NAME = re.compile(r"^[a-z0-9_-]{1,24}-[0-9a-f]{8}\.(png|jpg|webp)$")
@@ -145,7 +147,17 @@ def normalize_layout(lay):
             out.append({"id": c["id"], "name": str(c.get("name") or "Hat").strip()[:24],
                         "xy": [round(xy[0], 4), round(xy[1], 4)], "dirs": {d: dirs[d] for d in CLUSTER_DIRS if d in dirs}})
         clusters[vid] = out
-    return {"version": 1, "views": views, "pins": pins, "clusters": clusters}
+    names = {}
+    raw_names = lay.get("names") or {}
+    if not isinstance(raw_names, dict):
+        raise ValueError("names must be an object")
+    for key, name in raw_names.items():
+        if not (str(key).isdigit() and 1 <= int(key) <= 128):
+            raise ValueError(f"names: {key!r} is not a button number 1-128")
+        name = str(name).strip()[:32]
+        if name:
+            names[str(int(key))] = name
+    return {"version": 1, "views": views, "pins": pins, "clusters": clusters, "names": names}
 
 
 def write_json(path, obj):

@@ -108,10 +108,16 @@ A local page opens in your browser:
   push"), then click where it is. It's drawn as one cross-shaped widget. Each segment lights up
   and dims when unmapped, hovering shows every direction's mapping, and double-clicking renames
   it. Its buttons are still mapped individually in the cards.
+- **Button names:** click a `BTN n` chip on a card, or double-click a button in the physical grid,
+  to name that physical button (e.g. "Trigger stage 1", "Rapid-fire paddle up"). The name
+  appears under the chip on every card it feeds, in grid and stick-map tooltips and in
+  messages. Names describe your hardware, so all profiles share them.
+- **5-way hat badges:** a chip whose button belongs to a 5-way hat shows the hat and direction,
+  e.g. `BTN 11 · Hat 2 ▲`.
 - **Profiles:** keep one per game. The selected profile is the one applied.
 
-Changes save to `~/.config/vkb-hotas/mapping.json` (the stick map to `layout.json` and
-`images/` beside it, shared by all profiles) and the daemon applies them
+Changes save to `~/.config/vkb-hotas/mapping.json`. The stick map and button names go to
+`layout.json` and `images/` beside it, shared by all profiles. and the daemon applies them
 within half a second, even mid-game. No sudo or restart is needed. Switching
 between 16 and 32 buttons briefly re-creates the virtual stick, so do that with
 the game closed.
