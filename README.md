@@ -45,11 +45,11 @@ Reports from other sticks and games are welcome.
 sudo ./install.sh --list            # show connected sticks
 sudo ./install.sh                   # autodetects if exactly one VKB device is plugged in
 sudo ./install.sh --device 231d:3200   # or pick one explicitly (any vendor works)
-./proton-setup.py                   # as your user, games closed
+./tools/proton-setup.py             # as your user, games closed
 ```
 
 `proton-setup.py` configures Squadrons and Ace Combat 8 by default. Pass app ids
-for other games (`./proton-setup.py --list` shows them). It sets the winebus
+for other games (`./tools/proton-setup.py --list` shows them). It sets the winebus
 `Enable SDL`=0 in each prefix, so Wine passes the virtual stick through its
 hidraw backend, and clears stale DirectInput cache entries. Backups are written
 next to each edited `.reg` file.
@@ -64,13 +64,13 @@ PROTON_ENABLE_HIDRAW=0x044F/0xB10A %command%
 ## Verify
 
 ```bash
-./vkb-check.py
+./tools/vkb-check.py
 ```
 
 This checks the service, that the real stick is hidden, that the virtual stick
 is accessible, and how SDL classifies it. To check a game, launch it once with
 `PROTON_ENABLE_HIDRAW=0x044F/0xB10A PROTON_LOG=1 WINEDEBUG=+hid,+dinput %command%`,
-open its controls menu, quit, and run `./vkb-check.py` again. A working game
+open its controls menu, quit, and run `./tools/vkb-check.py` again. A working game
 shows the virtual T.16000M created as a *joystick*, the real stick not visible,
 and a joystick device "acquired, read N times".
 
@@ -99,13 +99,17 @@ A local page opens in your browser:
   × to remove). Zoom with the mouse wheel or the −/+ buttons (up to 8×) and drag to pan; pins
   keep their size on screen, so small hats are easy to hit, and **FIT** shows the whole picture.
   The default views are drawings of the Gladiator NXT EVO Omni Throttle (whole stick, SCG grip
-  head, triggers in side profile, base front); generic outlines are available for other sticks. Add your own
+  head, triggers in side profile, base front); generic outlines are available for other sticks.
+  **Pins belong to the picture**: each drawing and each photo keeps its own pins, so changing a
+  view's drawing shows that drawing's pins and changing back restores the old ones. Add your own
   views, and swap any drawing for a photo of your stick with **Photo…** (PNG/JPEG/WebP, up to
   10 MB). VKB button numbering depends on grip and firmware profile, so pins are placed by you
   rather than pre-filled.
 - **5-way hats:** VKB's 4-way hats with center push report as five separate buttons. Click
   **+ 5-way hat**, name it, push up, right, down and left, press it in (or choose "No center
-  push"), then click where it is. It's drawn as one cross-shaped widget. Each segment lights up
+  push"), then click where it is. To show the same hat on another drawing, use **Place pins** and
+  press any of its buttons: the whole hat gets placed, with no new setup. Its × removes it from
+  that drawing only. It's drawn as one cross-shaped widget. Each segment lights up
   and dims when unmapped, hovering shows every direction's mapping, and double-clicking renames
   it. Its buttons are still mapped individually in the cards.
 - **Button names:** click a `BTN n` chip on a card, or double-click a button in the physical grid,
@@ -169,7 +173,7 @@ you) and record yourself moving every control:
 
 ```bash
 sudo systemctl stop vkb-hotas
-./vkb-learn.py 60
+./tools/vkb-learn.py 60
 sudo systemctl start vkb-hotas
 ```
 
@@ -187,7 +191,7 @@ throttle), plus button numbers above 16.
 
 ```bash
 sudo ./uninstall.sh
-./proton-setup.py --undo            # restore Wine's default input backend in the prefixes
+./tools/proton-setup.py --undo      # restore Wine's default input backend in the prefixes
 ```
 
 ## Limitations
@@ -211,16 +215,15 @@ real stick ──evdev (grabbed)──▶ vkb-hotas.py ──/dev/uhid──▶ 
      └─ hidden: udev drops uaccess   vkb-mapper.py ◀──▶ browser UI
 ```
 
-| File | Purpose |
+| Path | Purpose |
 |---|---|
-| `vkb-hotas.py`, `vkb_common.py` | daemon and shared device-matching helpers (installed to `/usr/local/lib/vkb-hotas`) |
-| `72-vkb-hotas.rules.in` | udev rule template: autostart, hiding, virtual-stick access |
-| `vkb-hotas.service`, `vkb-hotas.default` | systemd unit and config template |
-| `install.sh`, `uninstall.sh` | system install/removal |
-| `proton-setup.py` | per-game Proton prefix configuration |
-| `vkb-mapper.py`, `vkb-mapper.html`, `vkb-mapper.desktop` | HOTAS Mapper GUI (local web UI, standard library only) |
-| `vkb-check.py`, `vkb-learn.py` | diagnostics: setup and Proton-log analysis; axis discovery |
-| `dev/fake-daemon.py` | development: the daemon's mapping/socket logic with a simulated stick, for working on the GUI without root |
+| `install.sh`, `uninstall.sh` | system install/removal (everything is installed flat into `/usr/local/lib/vkb-hotas`) |
+| `service/` | the root daemon `vkb-hotas.py`, its systemd unit, config template `vkb-hotas.default` and udev rule template `72-vkb-hotas.rules.in` |
+| `mapper/` | HOTAS Mapper: server `vkb-mapper.py`, page `vkb-mapper.html` (standard library only, no build) and menu entry `vkb-mapper.desktop` |
+| `common/` | `vkb_common.py`: config, device matching and the mapping format shared by everything |
+| `tools/` | helpers you run as your user: `proton-setup.py` (per-game prefix setup), `vkb-check.py` (setup and Proton-log diagnostics), `vkb-learn.py` (axis discovery) |
+| `dev/` | `fake-daemon.py`: the daemon's mapping/socket logic with a simulated stick, for working on the GUI without root |
+| `CLAUDE.md`, `.claude/skills/` | guidance and workflows for Claude Code sessions: verify an install, test the installer and the mapper UI without root, ship a change, analyse Proton logs |
 
 ## License
 

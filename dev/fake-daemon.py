@@ -3,7 +3,7 @@
 fake-daemon: develop and test HOTAS Mapper without root or a stick.
 
 Runs the daemon's real Mapper, ControlServer and MappingWatcher classes (imported
-from ../vkb-hotas.py) against a simulated VKB Gladiator NXT EVO OT R, but
+from ../service/vkb-hotas.py) against a simulated VKB Gladiator NXT EVO OT R, but
 without uhid, evdev grabbing or udev hiding. Axes sweep continuously; buttons
 and hat directions are pressed on demand.
 
@@ -11,7 +11,7 @@ and hat directions are pressed on demand.
 
 Then, in another terminal, point the mapper at it:
 
-  VKB_HOTAS_CTL=DIR/ctl.sock ./vkb-mapper.py --mapping DIR/mapping.json
+  VKB_HOTAS_CTL=DIR/ctl.sock mapper/vkb-mapper.py --mapping DIR/mapping.json
 
 Simulated presses (held for --hold seconds) via the control socket, which the
 real daemon doesn't accept:
@@ -21,7 +21,7 @@ real daemon doesn't accept:
   dev/fake-daemon.py --press 17 [--dir DIR]       same, as a one-shot client
 
 Keep the main loop's message handling (hello / mapping / state / pulse) in step
-with main() in vkb-hotas.py.
+with main() in service/vkb-hotas.py.
 """
 import argparse
 import importlib.util
@@ -36,8 +36,8 @@ import tempfile
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-sys.path.insert(0, ROOT)
-_spec = importlib.util.spec_from_file_location("vkb_hotas", os.path.join(ROOT, "vkb-hotas.py"))
+sys.path.insert(0, os.path.join(ROOT, "common"))
+_spec = importlib.util.spec_from_file_location("vkb_hotas", os.path.join(ROOT, "service", "vkb-hotas.py"))
 v = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(v)
 
@@ -134,7 +134,7 @@ def main():
             return
         print(f"pressed {source}", flush=True)
 
-    print(f"fake daemon on {sock_path}\n  mapper: VKB_HOTAS_CTL={sock_path} {ROOT}/vkb-mapper.py "
+    print(f"fake daemon on {sock_path}\n  mapper: VKB_HOTAS_CTL={sock_path} {ROOT}/mapper/vkb-mapper.py "
           f"--mapping {watcher.path}", flush=True)
     t0, last_sent, next_check, held = time.monotonic(), 0.0, 0.0, {}
 

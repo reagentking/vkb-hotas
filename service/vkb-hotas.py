@@ -36,6 +36,9 @@ import time
 import evdev
 from evdev import ecodes as E
 
+# vkb_common lives in ../common in the repo and next to this file once installed
+_here = os.path.dirname(os.path.realpath(__file__))
+sys.path[:0] = [_here, os.path.join(os.path.dirname(_here), "common")]
 from vkb_common import (DEFAULT_AXES, EMU_AXES, HAT_DIRS, default_match, default_profile,
                         find_one, load_mapping, mapping_path)
 

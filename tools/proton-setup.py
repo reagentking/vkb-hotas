@@ -15,6 +15,7 @@ For each prefix:
     dropped so the game enumerates fresh.
 A timestamped backup is written next to each edited .reg file.
 """
+import sys
 import argparse
 import glob
 import os
@@ -23,6 +24,9 @@ import shutil
 import subprocess
 import time
 
+# vkb_common lives in ../common in the repo and next to this file once installed
+_here = os.path.dirname(os.path.realpath(__file__))
+sys.path[:0] = [_here, os.path.join(os.path.dirname(_here), "common")]
 from vkb_common import default_match, parse_match
 
 DEFAULT_APPS = {"1222730": "STAR WARS: Squadrons", "2288340": "ACE COMBAT 8: WINGS OF THEVE"}

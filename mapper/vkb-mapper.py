@@ -33,7 +33,8 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.realpath(__file__))
-sys.path.insert(0, HERE)
+# vkb_common lives in ../common in the repo and next to this file once installed
+sys.path[:0] = [HERE, os.path.join(os.path.dirname(HERE), "common")]
 from vkb_common import (DEFAULT_AXES, EMU_AXES, default_profile, load_mapping,  # noqa: E402
                         mapping_path, normalize_mapping, read_config)
 
@@ -41,7 +42,7 @@ CTL = os.environ.get("VKB_HOTAS_CTL", "/run/vkb-hotas/ctl.sock")
 PAGE = os.path.join(HERE, "vkb-mapper.html")
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "vkb-mapper")
 IDLE_EXIT = 45  # seconds without any open UI before the server quits
-API_VERSION = 4  # bump when the page needs server features; the page refuses to edit layouts on a mismatch
+API_VERSION = 5  # bump when the page needs server features; the page refuses to edit layouts on a mismatch
 
 
 def initial_mapping():
@@ -64,24 +65,28 @@ def initial_mapping():
 # ---- Stick layout (pictures + pin positions) ------------------------------------
 # layout.json lives next to mapping.json. It describes the hardware, not a game, so
 # it's shared by all profiles and the daemon never reads it.
-#   {"version": 1,
+#   {"version": 2,
 #    "views": [{"id": "stick", "name": "Whole stick", "schematic": "evo-ot-side", "image": null | "x-1a2b3c4d.jpg"}],
-#    "pins": {"stick": {"17": [0.42, 0.31], "hat": [0.5, 0.12]}},
-#    "clusters": {"head": [{"id": "c1", "name": "Hat 2", "xy": [0.3, 0.2],
-#                           "dirs": {"up": 11, "right": 12, "down": 13, "left": 14, "center": 15}}]},
+#    "hats":  [{"id": "c1", "name": "Hat 2", "dirs": {"up": 11, "right": 12, "down": 13, "left": 14, "center": 15}}],
+#    "pins":  {"draw:evo-ot-side": {"17": [0.42, 0.31], "hat": [0.5, 0.12], "c:c1": [0.7, 0.1]},
+#              "photo:x-1a2b3c4d.jpg": {...}},
 #    "names": {"1": "Trigger stage 1", "21": "Rapid-fire up"}}
-# Pin keys: physical button numbers ("1".."128") or "hat" (the stick's real hat); coordinates
-# are 0..1 fractions. Clusters are multi-way hats that report as separate buttons (VKB's 4-way
-# hats with center push); each direction is learned by pressing it. Names are the user's labels
-# for physical buttons (hardware, so shared by all profiles), shown wherever a button appears.
+# Pins are anchored to the *picture* (a drawing or a photo), not to the view showing it, so
+# switching a view's drawing shows that drawing's own pins and never misplaces them. Pin keys:
+# physical button numbers ("1".."128"), "hat" (the stick's real hat) or "c:<hat id>" (where a
+# 5-way hat sits on that picture); coordinates are 0..1 fractions.
+# hats are multi-way hats that report as separate buttons (VKB's 4-way hats with center push);
+# they're hardware, defined once and placeable on any picture; each direction is learned by
+# pressing it. Names are the user's labels for physical buttons, shown wherever a button appears.
+# Version 1 kept pins and hats per view; normalize_layout converts it.
 SCHEMATICS = ("evo-ot-side", "evo-scg-head", "evo-scg-side", "evo-base-front", "grip-front", "grip-back", "base")
 CLUSTER_DIRS = ("up", "right", "down", "left", "center")
-DEFAULT_LAYOUT = {"version": 1, "views": [
+DEFAULT_LAYOUT = {"version": 2, "views": [
     {"id": "stick", "name": "Whole stick", "schematic": "evo-ot-side", "image": None},
     {"id": "head", "name": "Grip head", "schematic": "evo-scg-head", "image": None},
     {"id": "side", "name": "Triggers", "schematic": "evo-scg-side", "image": None},
     {"id": "base", "name": "Base front", "schematic": "evo-base-front", "image": None}],
-    "pins": {}, "clusters": {}, "names": {}}
+    "hats": [], "pins": {}, "names": {}}
 IMAGE_TYPES = {b"\x89PNG\r\n\x1a\n": "png", b"\xff\xd8\xff": "jpg"}
 IMAGE_MAX = 10 << 20
 IMAGE_NAME = re.compile(r"^[a-z0-9_-]{1,24}-[0-9a-f]{8}\.(png|jpg|webp)$")
@@ -95,6 +100,33 @@ def image_kind(data):
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "webp"
     return None
+
+
+def picture_key(view):
+    return f"photo:{view['image']}" if view["image"] else f"draw:{view['schematic']}"
+
+
+def _xy(xy, what):
+    if not (isinstance(xy, list) and len(xy) == 2
+            and all(isinstance(c, (int, float)) and not isinstance(c, bool) and 0 <= c <= 1 for c in xy)):
+        raise ValueError(f"{what}: coordinates must be two numbers 0..1")
+    return [round(xy[0], 4), round(xy[1], 4)]
+
+
+def _migrate_v1(lay, views):
+    """v1 kept pins/clusters per view id: re-anchor them to each view's current picture."""
+    by_id = {v["id"]: picture_key(v) for v in views}
+    pins, hats = {}, []
+    for vid, vp in (lay.get("pins") or {}).items():
+        if vid in by_id and isinstance(vp, dict):
+            pins.setdefault(by_id[vid], {}).update(vp)
+    for vid, cl in (lay.get("clusters") or {}).items():
+        for c in cl if isinstance(cl, list) else []:
+            if isinstance(c, dict):
+                hats.append({k: c.get(k) for k in ("id", "name", "dirs")})
+                if vid in by_id and c.get("xy") is not None:
+                    pins.setdefault(by_id[vid], {})[f"c:{c.get('id')}"] = c["xy"]
+    return pins, hats
 
 
 def normalize_layout(lay):
@@ -113,40 +145,55 @@ def normalize_layout(lay):
             raise ValueError(f"view {v['id']}: bad image name")
         ids.add(v["id"])
         views.append({"id": v["id"], "name": name, "schematic": sch, "image": img})
+
+    if lay.get("version", 1) < 2 or "clusters" in lay:
+        raw_pins, raw_hats = _migrate_v1(lay, views)
+    else:
+        raw_pins, raw_hats = lay.get("pins") or {}, lay.get("hats") or []
+
+    if not isinstance(raw_hats, list) or len(raw_hats) > 32:
+        raise ValueError("hats must be a list of at most 32")
+    hats, hat_ids, hat_buttons = [], set(), set()
+    for c in raw_hats:
+        if not isinstance(c, dict) or not VIEW_ID.match(str(c.get("id", ""))) or c["id"] in hat_ids:
+            raise ValueError("each 5-way hat needs a unique id")
+        dirs = c.get("dirs")
+        if not isinstance(dirs, dict) or len(dirs) < 2 or not set(dirs) <= set(CLUSTER_DIRS):
+            raise ValueError(f"hat {c['id']}: needs at least 2 of {', '.join(CLUSTER_DIRS)}")
+        if not all(isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= 128 for n in dirs.values()):
+            raise ValueError(f"hat {c['id']}: directions must be button numbers 1-128")
+        hat_ids.add(c["id"])
+        hat_buttons.update(dirs.values())
+        hats.append({"id": c["id"], "name": str(c.get("name") or "Hat").strip()[:24],
+                     "dirs": {d: dirs[d] for d in CLUSTER_DIRS if d in dirs}})
+
+    if not isinstance(raw_pins, dict):
+        raise ValueError("pins must be an object")
+    photos = {v["image"] for v in views if v["image"]}
     pins = {}
-    for vid, vp in (lay.get("pins") or {}).items():
-        if vid not in ids or not isinstance(vp, dict):
-            continue  # pins of a removed view are dropped
+    for pk, vp in raw_pins.items():
+        kind, _, ref = str(pk).partition(":")
+        valid = (kind == "draw" and ref in SCHEMATICS) or (kind == "photo" and IMAGE_NAME.match(ref))
+        if not valid or not isinstance(vp, dict):
+            raise ValueError(f"pins: {pk!r} is not a picture key (draw:<drawing> or photo:<file>)")
+        if kind == "photo" and ref not in photos:
+            continue  # photo removed (its file is deleted too)
         clean = {}
         for key, xy in vp.items():
-            if not (key == "hat" or (key.isdigit() and 1 <= int(key) <= 128)):
-                raise ValueError(f"pin {key!r}: must be a button number or 'hat'")
-            if not (isinstance(xy, list) and len(xy) == 2 and all(isinstance(c, (int, float)) and 0 <= c <= 1 for c in xy)):
-                raise ValueError(f"pin {key!r}: coordinates must be two numbers 0..1")
-            clean[key] = [round(xy[0], 4), round(xy[1], 4)]
-        pins[vid] = clean
-    clusters = {}
-    for vid, cl in (lay.get("clusters") or {}).items():
-        if vid not in ids or not isinstance(cl, list):
-            continue
-        if len(cl) > 16:
-            raise ValueError("at most 16 multi-way hats per view")
-        out, cids = [], set()
-        for c in cl:
-            if not isinstance(c, dict) or not VIEW_ID.match(str(c.get("id", ""))) or c["id"] in cids:
-                raise ValueError("each multi-way hat needs a unique id")
-            xy = c.get("xy")
-            if not (isinstance(xy, list) and len(xy) == 2 and all(isinstance(v, (int, float)) and 0 <= v <= 1 for v in xy)):
-                raise ValueError(f"hat {c['id']}: position must be two numbers 0..1")
-            dirs = c.get("dirs")
-            if not isinstance(dirs, dict) or len(dirs) < 2 or not set(dirs) <= set(CLUSTER_DIRS):
-                raise ValueError(f"hat {c['id']}: needs at least 2 of {', '.join(CLUSTER_DIRS)}")
-            if not all(isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= 128 for n in dirs.values()):
-                raise ValueError(f"hat {c['id']}: directions must be button numbers 1-128")
-            cids.add(c["id"])
-            out.append({"id": c["id"], "name": str(c.get("name") or "Hat").strip()[:24],
-                        "xy": [round(xy[0], 4), round(xy[1], 4)], "dirs": {d: dirs[d] for d in CLUSTER_DIRS if d in dirs}})
-        clusters[vid] = out
+            if key.startswith("c:"):
+                if key[2:] not in hat_ids:
+                    continue  # position of a deleted hat
+            elif key == "hat":
+                pass
+            elif key.isdigit() and 1 <= int(key) <= 128:
+                if int(key) in hat_buttons:
+                    continue  # a button is drawn as part of its hat, never as its own pin
+            else:
+                raise ValueError(f"pin {key!r}: must be a button number, 'hat' or 'c:<hat id>'")
+            clean[key] = _xy(xy, f"pin {key!r}")
+        if clean:
+            pins[pk] = clean
+
     names = {}
     raw_names = lay.get("names") or {}
     if not isinstance(raw_names, dict):
@@ -157,7 +204,7 @@ def normalize_layout(lay):
         name = str(name).strip()[:32]
         if name:
             names[str(int(key))] = name
-    return {"version": 1, "views": views, "pins": pins, "clusters": clusters, "names": names}
+    return {"version": 2, "views": views, "hats": hats, "pins": pins, "names": names}
 
 
 def write_json(path, obj):

@@ -22,6 +22,9 @@ import time
 import json
 import socket
 
+# vkb_common lives in ../common in the repo and next to this file once installed
+_here = os.path.dirname(os.path.realpath(__file__))
+sys.path[:0] = [_here, os.path.join(os.path.dirname(_here), "common")]
 from vkb_common import CONFIG, EMULATED, default_match, load_mapping, mapping_path, parse_match
 
 if sys.stdout.isatty():

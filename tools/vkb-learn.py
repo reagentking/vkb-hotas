@@ -9,6 +9,7 @@ Move every control through its full travel, then let go, before time runs out.
 Note: while vkb-hotas is running the real stick is hidden from you; stop it
 first (sudo systemctl stop vkb-hotas) or run this as root.
 """
+import os
 import argparse
 import select
 import sys
@@ -17,6 +18,9 @@ import time
 import evdev
 from evdev import ecodes as E
 
+# vkb_common lives in ../common in the repo and next to this file once installed
+_here = os.path.dirname(os.path.realpath(__file__))
+sys.path[:0] = [_here, os.path.join(os.path.dirname(_here), "common")]
 from vkb_common import default_match, find_one
 
 

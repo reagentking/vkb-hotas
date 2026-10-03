@@ -20,17 +20,35 @@ rebinding for this stick.
 but shows controller button icons, and in-flight behaviour hasn't been confirmed yet. If AC8
 treats the T.16000M badly, the planned fallback is emulating a Logitech X56 instead.
 
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| `service/` | root daemon `vkb-hotas.py`, systemd unit, config template, udev rule template |
+| `mapper/` | HOTAS Mapper server `vkb-mapper.py`, page `vkb-mapper.html`, `.desktop` entry |
+| `common/` | `vkb_common.py`, shared by service, mapper and tools |
+| `tools/` | user-run helpers: `proton-setup.py`, `vkb-check.py`, `vkb-learn.py` |
+| `dev/` | `fake-daemon.py` (GUI testing without root) |
+| top level | `install.sh`, `uninstall.sh`, docs |
+
+- **The install is flat:** `install.sh` copies the service, mapper and common files into
+  `/usr/local/lib/vkb-hotas/` with no subdirectories. The systemd unit's `ExecStart` and the
+  `/usr/local/bin/vkb-mapper` symlink point there.
+- **Finding `vkb_common`:** every script puts both its own directory and `../common` on
+  `sys.path` before importing it, so the same file runs from the repo and from the flat install.
+  Keep that bootstrap in new scripts.
+
 ## Commands
 
-There is no build step, test suite or linter. Python files are run directly; `vkb-hotas.py` must run
-as root.
+There is no build step, test suite or linter. Python files are run directly; `service/vkb-hotas.py` must
+run as root.
 
 ```bash
 # Syntax-check everything (don't use py_compile: it writes __pycache__, see Gotchas)
-for f in *.py; do python3 -c "import ast; ast.parse(open('$f').read())" || echo "FAIL $f"; done
+for f in */*.py; do python3 -c "import ast; ast.parse(open('$f').read())" || echo "FAIL $f"; done
 bash -n install.sh uninstall.sh
-t=$(mktemp --suffix=.rules); sed -e s/@VID@/231d/g -e s/@PID@/3200/g 72-vkb-hotas.rules.in > $t; udevadm verify $t; rm $t
-systemd-analyze verify ./vkb-hotas.service
+t=$(mktemp --suffix=.rules); sed -e s/@VID@/231d/g -e s/@PID@/3200/g service/72-vkb-hotas.rules.in > $t; udevadm verify $t; rm $t
+systemd-analyze verify service/vkb-hotas.service
 
 # Install / reinstall after any change (copies to /usr/local/lib/vkb-hotas, restarts the service)
 sudo ./install.sh [--device VID:PID] [--user NAME]     # --list shows connected sticks
@@ -38,32 +56,56 @@ sudo ./uninstall.sh
 
 # Verify the whole chain: service, hiding, virtual device, SDL view, control socket, mapping file,
 # plus analysis of the newest ~/steam-*.log
-./vkb-check.py                # or: ./vkb-check.py ~/steam-<appid>.log
+tools/vkb-check.py            # or: tools/vkb-check.py ~/steam-<appid>.log
 journalctl -u vkb-hotas -b
 
 # Proton prefix setup (as user, games closed). Default app ids: 1222730 (Squadrons), 2288340 (AC8)
-./proton-setup.py [APPID...] | --list | --undo
+tools/proton-setup.py [APPID...] | --list | --undo
 ```
 
 A game launch that produces an analysable log uses these launch options:
 `PROTON_ENABLE_HIDRAW=0x044F/0xB10A PROTON_LOG=1 WINEDEBUG=+hid,+dinput %command%`.
 
+### Working with the user's installed system
+
+- **sudo is the human's job.** `sudo ./install.sh` and other privileged steps need a password, so the
+  user runs them in a real terminal; an inline `!` command box can't take one. Give them the exact
+  command, then verify afterwards (the `verify-install` skill).
+- **Restart the mapper after a reinstall.** The user must close HOTAS Mapper and reopen it once the
+  old server has exited (about 45 s). The `API_VERSION` check guards the gap.
+- **Editing the user's live files** (`~/.config/vkb-hotas/*.json`):
+  - only with their go-ahead, and make a timestamped backup first;
+  - check that HOTAS Mapper isn't running;
+  - validate with the same normalizer the server uses.
+  - If you write a new format while an older mapper is still installed, an old server could drop
+    fields on save. Tell the user to reinstall before opening the mapper.
+
+### Project skills (`.claude/skills/`)
+
+| Skill | Use it for |
+|---|---|
+| `verify-install` | "I ran the install, check if it's working": installed vs repo, stale mapper, health checks, read-only validation of the user's files |
+| `test-mapper-ui` | Testing HOTAS Mapper in the browser against `dev/fake-daemon.py`, isolated from the user's own mapper |
+| `ship-change` | "Update docs, commit and push": docs-vs-diff, `API_VERSION` rule, prechecks, commit, push |
+| `test-installer` | `install.sh` / `uninstall.sh` changed or files moved: run both in a sandbox root without sudo, and check every installed file against its source |
+| `proton-log-analysis` | Whether a game accepts the stick: launch options, `vkb-check.py` log analysis, Wine trace pitfalls |
+
 ### Testing without root
 
 **GUI and control protocol:** `dev/fake-daemon.py` runs the daemon's real `Mapper`, `ControlServer`
-and `MappingWatcher` (imported from `vkb-hotas.py`) against a simulated Gladiator EVO OT R. It has no
+and `MappingWatcher` (imported from `service/vkb-hotas.py`) against a simulated Gladiator EVO OT R. It has no
 uhid, grab or udev, so it needs no root and no stick.
 
 ```bash
 dev/fake-daemon.py [--button-count 32] [--still]          # socket + mapping in $XDG_RUNTIME_DIR/vkb-hotas-dev/
-VKB_HOTAS_CTL=$XDG_RUNTIME_DIR/vkb-hotas-dev/ctl.sock ./vkb-mapper.py --mapping $XDG_RUNTIME_DIR/vkb-hotas-dev/mapping.json
+VKB_HOTAS_CTL=$XDG_RUNTIME_DIR/vkb-hotas-dev/ctl.sock mapper/vkb-mapper.py --mapping $XDG_RUNTIME_DIR/vkb-hotas-dev/mapping.json
 dev/fake-daemon.py --press 17          # simulate physical button 17 (or hat:left etc.) being pressed
 ```
 
 - **Extra command:** the fake daemon also accepts `{"cmd":"fake_press","source":...}`; the real
   daemon doesn't.
 - **Keep it in step:** its main-loop message handling (hello / mapping / state / pulse) is a copy of
-  `main()` in `vkb-hotas.py`. Update both together.
+  `main()` in `service/vkb-hotas.py`. Update both together.
 - **Socket path limit:** unix socket paths max out at 107 bytes, so keep `--dir` short.
 
 **Mapper logic in isolation:** load the hyphenated daemon file with importlib and feed it events.
@@ -71,7 +113,7 @@ dev/fake-daemon.py --press 17          # simulate physical button 17 (or hat:lef
 
 ```python
 import importlib.util
-s = importlib.util.spec_from_file_location("v", "vkb-hotas.py"); v = importlib.util.module_from_spec(s); s.loader.exec_module(v)
+sys.path.insert(0, "common"); s = importlib.util.spec_from_file_location("v", "service/vkb-hotas.py"); v = importlib.util.module_from_spec(s); s.loader.exec_module(v)
 m = v.Mapper(FakeStick(), v.T16000M); m.apply(vkb_common.normalize_profile({...}))
 m.feed(evdev.InputEvent(0, 0, E.EV_KEY, 0x2c0, 1)); m.output(time.monotonic())  # -> (mask, hat, axes)
 ```
@@ -92,7 +134,7 @@ real stick ─evdev (EVIOCGRAB)─▶ vkb-hotas.py (root) ─/dev/uhid─▶ vir
           ~/.config/vkb-hotas/mapping.json      └─ /run/vkb-hotas/ctl.sock (JSON lines) ◀─▶ vkb-mapper.py (user, 127.0.0.1 HTTP+SSE) ◀─▶ vkb-mapper.html
 ```
 
-**Daemon (`vkb-hotas.py`).** A single-threaded `poll()` loop over the evdev fd, the uhid fd and the
+**Daemon (`service/vkb-hotas.py`).** A single-threaded `poll()` loop over the evdev fd, the uhid fd and the
 control-socket fds. The poll set is rebuilt every iteration, because the uhid device is destroyed
 and re-created whenever `button_count` changes (16 ↔ 32 changes the HID descriptor).
 
@@ -104,7 +146,7 @@ and re-created whenever `button_count` changes (16 ↔ 32 changes the HID descri
 - **`ControlServer`** pushes `hello` / `state` (≤30 Hz, only when something changed) / `mapping`
   messages, and accepts `{"cmd":"pulse","button":N}` and `{"cmd":"hello"}`.
 
-**Shared model (`vkb_common.py`).** Owns config parsing (`/etc/default/vkb-hotas`), device matching
+**Shared model (`common/vkb_common.py`).** Owns config parsing (`/etc/default/vkb-hotas`), device matching
 (`VKB_HOTAS_DEVICE` as VID[:PID], defaulting to any VKB vendor `231d`), and the mapping schema.
 `normalize_profile` / `normalize_mapping` are the single validator used by the daemon, the GUI
 server and the checker. Change the schema there and nowhere else.
@@ -124,9 +166,9 @@ Keep every tool consistent with this.
   the ACL that is already applied.
 - On exit it removes the flag and runs `udevadm trigger --action=change`.
 - The rule file must sort after `70-uaccess` and before `73-seat-late`. It is generated by
-  `install.sh` from `72-vkb-hotas.rules.in` (`@VID@` / `@PID@`).
+  `install.sh` from `service/72-vkb-hotas.rules.in` (`@VID@` / `@PID@`).
 
-**GUI (`vkb-mapper.py` + `.html`).** The server is stdlib `ThreadingHTTPServer`. It enforces three
+**GUI (`mapper/vkb-mapper.py` + `.html`).** The server is stdlib `ThreadingHTTPServer`. It enforces three
 guards, and keeps them:
 - binds `127.0.0.1` only,
 - requires a per-session token (`X-Token` header or `?t=`),
@@ -146,7 +188,7 @@ guards, and keeps them:
   because an old server would drop fields it doesn't know when saving. Bump `API_VERSION` (and the
   page's check) whenever the page relies on new server behaviour. History: 2 = clusters and `evo-*`
   drawings; 3 = `evo-scg-side` (an older server would silently swap unknown drawings on save);
-  4 = physical button `names`.
+  4 = physical button `names`; 5 = layout format 2 (picture-anchored pins, global `hats`).
 - The page is one self-contained file (CSP forbids external resources). Physical inputs are amber
   and emulated/game outputs are cyan.
 - **Stick map:** layout and photos are owned by the mapper server alone; the daemon never reads them.
@@ -154,14 +196,25 @@ guards, and keeps them:
   tests).
   - The layout is kept out of `mapping.json` deliberately: `normalize_mapping` drops unknown keys,
     and the layout describes hardware, not a game profile.
-  - `normalize_layout` validates it. Pins are keyed by physical button number or `"hat"`, with
-    0..1 coordinates.
-  - `clusters` holds multi-way hats that report as separate buttons (VKB 4-way + center push).
-    Directions are learned by pressing; the user chose this over assuming numbering, which varies
-    by firmware.
-  - Clusters are visual only: the user chose to keep mapping per-button, with no "send cluster to
-    game hat" shortcut.
-  - A button belongs to a cluster or has its own pin, never both.
+  - **Format version 2:** `views`, `hats` (global), `pins` keyed by **picture**, and `names`.
+    - A picture key is `draw:<schematic>` or `photo:<file>` (`picture_key()` on the server,
+      `picKey()` in the page).
+    - Pin keys are a button number, `"hat"`, or `c:<hat id>` for a 5-way hat's position; 0..1
+      coordinates.
+    - Pins used to be per view, and changing a view's drawing left them stranded on the wrong
+      picture (the user's bug report). Anchoring them to the picture fixes it.
+    - Version 1 (pins and `clusters` per view id) is converted by `_migrate_v1`, which attaches
+      each view's pins to that view's current picture.
+    - `normalize_layout` also drops pins of removed photos and deleted hats, and button pins that
+      belong to a hat.
+  - `hats` are multi-way hats that report as separate buttons (VKB 4-way + center push). They're
+    defined once and placed per picture: Place pins plus any of a hat's buttons places the whole
+    hat. (In page code they're still called clusters: `clusterOf`, `renderClusters`, `.cluster`.)
+    - Directions are learned by pressing. The user chose this over assuming numbering, which
+      varies by firmware.
+    - Hats are visual only. The user chose to keep mapping per-button, with no "send hat to game
+      hat" shortcut.
+  - A button belongs to a hat or has its own pin, never both.
   - `names` holds the user's names for physical buttons (keys 1–128, at most 32 characters).
     - They describe hardware, so they live in the layout (shared across profiles), not in the
       per-profile `labels`, which say what a button does in-game.
@@ -186,7 +239,7 @@ guards, and keeps them:
   - **Defaults only apply to new layouts:** `DEFAULT_LAYOUT` is used only when no `layout.json`
     exists. Existing layouts keep their views and drawings.
 
-**Proton side.** `proton-setup.py` sets winebus `"Enable SDL"=dword:0` in each prefix's
+**Proton side.** `tools/proton-setup.py` sets winebus `"Enable SDL"=dword:0` in each prefix's
 `system.reg`, so Wine uses its hidraw backend for everything. That passes the T.16000M HID
 descriptor through untouched, and ignores SDL gamepad mappings that Steam injects. It also drops
 cached `DirectInput\VID_…` entries from `user.reg`.
@@ -208,13 +261,25 @@ cached `DirectInput\VID_…` entries from `user.reg`.
 - **`__pycache__`:** anything root runs from the source tree (e.g. the `install.sh` autodetect)
   writes root-owned `__pycache__` there. `install.sh` exports `PYTHONDONTWRITEBYTECODE=1`; keep that.
 - **`pkill -f <pattern>`** in a shell whose own command line contains the pattern kills that shell.
-  Match on `/proc/<pid>/cmdline` of `pgrep -x python3` instead.
+  Match on `/proc/<pid>/cmdline` of `pgrep -x python3` instead. Make the match specific to what you
+  started (e.g. a private test directory in the arguments), so the user's own processes can never
+  match.
+- **Backgrounding from bash scripts:** `( cd dir && cmd & )` inside a script left `cmd` as a
+  foreground child, and callers piping the script's output hung. Use
+  `(cd dir && exec setsid -f cmd < /dev/null > log 2>&1)`.
+- **`rm -rf` on a computed path** (e.g. `$(mktemp -d)`) is blocked by a safety check in Claude Code.
+  Use literal scratch paths for anything you need to delete afterwards.
 - **Steam holds the device open.** Steam opens the real stick at startup, and hiding doesn't revoke
   an existing fd. After install, Steam must be restarted.
 - **One source stick per install.** If the user owns a real T.16000M too, games see two identical
   devices; `vkb-check.py` warns about this.
 - **AC8 controller icons:** AC8 shows controller button icons even when DirectInput is working.
   That alone isn't a failure.
+- **Layout/format changes ripple into the user's data.**
+  - Bump `API_VERSION` whenever the page relies on new server behaviour.
+  - Make `normalize_layout` convert older formats, rather than reject them.
+  - Defaults (`DEFAULT_LAYOUT`) never reach existing users. Tell them how to get a new view or
+    drawing.
 
 ## Domain knowledge this work requires
 

@@ -271,7 +271,7 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
       <button class="btn small" id="placeBtn" title="Press a button on your stick, then click where it is">Place pins</button>
       <button class="btn small" id="hatAddBtn" title="Set up a 4-way hat with center push (it reports as 5 buttons)">+ 5-way hat</button>
       <button class="btn small" id="photoBtn" title="Use a photo of your stick for this view">Photo…</button>
-      <select id="schemSel" title="Drawn outline for this view"><optgroup label="VKB Gladiator NXT EVO"><option value="evo-ot-side">Omni Throttle (whole)</option><option value="evo-scg-head">SCG grip head</option><option value="evo-scg-side">SCG grip side (triggers)</option><option value="evo-base-front">EVO base (front)</option></optgroup><optgroup label="Generic"><option value="grip-front">Grip (front)</option><option value="grip-back">Grip (side)</option><option value="base">Base</option></optgroup></select>
+      <select id="schemSel" title="Drawing for this view (each drawing keeps its own pins)"><optgroup label="VKB Gladiator NXT EVO"><option value="evo-ot-side">Omni Throttle (whole)</option><option value="evo-scg-head">SCG grip head</option><option value="evo-scg-side">SCG grip side (triggers)</option><option value="evo-base-front">EVO base (front)</option></optgroup><optgroup label="Generic"><option value="grip-front">Grip (front)</option><option value="grip-back">Grip (side)</option><option value="base">Base</option></optgroup></select>
       <button class="btn small" id="schemBtn" title="Remove the photo and use the drawing">Use drawing</button>
       <span class="spacer"></span>
       <button class="btn small" id="viewAdd">+ View</button>
@@ -718,6 +718,11 @@ const SCHEM = {
     <circle cx="110" cy="345" r="9" fill="none" stroke="#26364a" stroke-width="1.5"/><circle cx="140" cy="356" r="9" fill="none" stroke="#26364a" stroke-width="1.5"/></svg>`,
 };
 const curView = () => layout.views.find(v => v.id === viewId) || layout.views[0];
+// pins are anchored to the picture (drawing or photo), not the view: switching a view's drawing
+// shows that drawing's own pins
+const picKey = v => v.image ? `photo:${v.image}` : `draw:${v.schematic}`;
+const curPins = () => (layout.pins[picKey(curView())] ||= {});
+const pinWhat = key => key === "hat" ? "the stick's hat" : key.startsWith("c:") ? `“${(layout.hats.find(h => "c:" + h.id === key) || {}).name || "hat"}”` : `button ${key}`;
 const pinLabel = key => key === "hat" ? "✥" : key;
 
 function reverseMap() {
@@ -755,15 +760,16 @@ function renderMap() {
   if (v.image) { const img = el("img"); img.alt = v.name; img.onload = applyZoom; img.src = `/api/image/${encodeURIComponent(v.image)}?t=${encodeURIComponent(TOKEN)}`; img.draggable = false; cv.append(img); }
   else { cv.insertAdjacentHTML("beforeend", SCHEM[v.schematic] || SCHEM["evo-ot-side"]); }
   $("#watermark").hidden = !!v.image;
-  const rev = reverseMap(), pins = layout.pins[v.id] || {};
+  const rev = reverseMap(), pins = layout.pins[picKey(v)] || {};
   refs.pins = {};
   for (const [key, [x, y]] of Object.entries(pins)) {
+    if (key.startsWith("c:")) continue;
     const pin = el("div", "pin" + (key === "hat" ? " hat" : ""), pinLabel(key)); pin.dataset.key = key;
     pin.style.left = x * 100 + "%"; pin.style.top = y * 100 + "%";
     const t = pinTargets(key, rev);
     pin.append(el("span", "tag" + (t.length ? "" : " none"), t.length ? "→" + tagText(key, t) : "unused"));
     const x_ = el("button", "x", "×"); x_.title = "Remove pin"; x_.onpointerdown = e => e.stopPropagation();
-    x_.onclick = e => { e.stopPropagation(); delete layout.pins[v.id][key]; saveLayout(); renderMap(); };
+    x_.onclick = e => { e.stopPropagation(); delete curPins()[key]; saveLayout(); renderMap(); };
     pin.append(x_);
     pin.onmouseenter = e => { showTip(key, e); crossHighlight(key, true); };
     pin.onmousemove = e => moveTip(e);
@@ -821,8 +827,8 @@ function startPlacing() {
 function stopPlacing() { placing = null; renderMap(); }
 function updatePlaceHint() {
   const h = $("#placeHint");
-  if (!placing) { h.textContent = layout && !Object.keys(layout.pins[curView().id] || {}).length ? "No pins on this view yet. Click “Place pins” and press buttons on your stick." : ""; return; }
-  h.textContent = placing.pending ? `Now click where ${placing.pending === "hat" ? "the hat" : "button " + placing.pending} is (Esc to stop).` : "Press a button or push the hat on your stick… (drag pins to adjust, × removes)";
+  if (!placing) { h.textContent = layout && !Object.keys(layout.pins[picKey(curView())] || {}).length ? "No pins on this drawing yet. Click “Place pins” and press buttons on your stick. (Each drawing and photo keeps its own pins.)" : ""; return; }
+  h.textContent = placing.pending ? `Now click where ${pinWhat(placing.pending)} is (Esc to stop).` : "Press a button or push the hat on your stick… (a 5-way hat's buttons place the whole hat; drag to adjust, × removes)";
 }
 function detectPlacing(m) {
   let src = m.raw.b.find(b => !placing.base.b.includes(b));
@@ -831,8 +837,7 @@ function detectPlacing(m) {
   placing.base = JSON.parse(JSON.stringify(m.raw));
   if (src == null) return;
   const owner = src !== "hat" && clusterOf(src);
-  if (owner) { $("#placeHint").textContent = `Button ${src} is the ${owner.dir} of “${owner.c.name}”. Drag that hat's widget to move it.`; return; }
-  placing.pending = String(src); updatePlaceHint();
+  placing.pending = owner ? `c:${owner.c.id}` : String(src); updatePlaceHint();
   for (const [k, pin] of Object.entries(refs.pins || {})) pin.classList.toggle("xhl", k === placing.pending);
 }
 $("#canvas").addEventListener("click", e => {
@@ -841,15 +846,15 @@ $("#canvas").addEventListener("click", e => {
   const xy = [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height].map(c => Math.max(0, Math.min(1, +c.toFixed(4))));
   if (wizard && wizard.step >= CL_DIRS.length) { finishWizard(xy); return; }
   if (!placing || !placing.pending) return;
-  const v = curView(); (layout.pins[v.id] ||= {})[placing.pending] = xy;
-  toast(`${placing.pending === "hat" ? "Hat" : "Button " + placing.pending} placed on ${v.name}`);
+  const v = curView(); curPins()[placing.pending] = xy;
+  const what = pinWhat(placing.pending); toast(`${what[0].toUpperCase() + what.slice(1)} placed on ${v.name}`);
   placing.pending = null; saveLayout(); renderMap();
 });
 function startDrag(e, pin, key) {
   if (!placing) return;
   e.preventDefault(); pin.setPointerCapture(e.pointerId); pin.style.cursor = "grabbing";
-  const r = $("#canvas").getBoundingClientRect(), v = curView();
-  const move = ev => { const x = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), y = Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height)); pin.style.left = x * 100 + "%"; pin.style.top = y * 100 + "%"; layout.pins[v.id][key] = [+x.toFixed(4), +y.toFixed(4)]; };
+  const r = $("#canvas").getBoundingClientRect(), pins = curPins();
+  const move = ev => { const x = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), y = Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height)); pin.style.left = x * 100 + "%"; pin.style.top = y * 100 + "%"; pins[key] = [+x.toFixed(4), +y.toFixed(4)]; };
   const up = () => { pin.removeEventListener("pointermove", move); pin.removeEventListener("pointerup", up); pin.style.cursor = ""; saveLayout(); };
   pin.addEventListener("pointermove", move); pin.addEventListener("pointerup", up);
 }
@@ -871,7 +876,7 @@ $("#photoFile").onchange = async e => {
     const r = await fetch(`/api/image?view=${encodeURIComponent(curView().id)}`, {method: "POST", headers: {"X-Token": TOKEN, "Content-Type": f.type || "application/octet-stream"}, body: f});
     const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText);
     curView().image = j.image; await saveLayout(true); renderMap();
-    toast("Photo added. Existing pins keep their relative positions; drag them to fit.");
+    toast("Photo added. Photos keep their own pins: place them with “Place pins”. “Use drawing” brings back the drawing's pins.");
   } catch (err) { toast("Photo not added: " + err.message, true); }
 };
 $("#viewAdd").onclick = async () => {
@@ -885,8 +890,8 @@ $("#viewRen").onclick = async () => { const v = curView(), n = await ask("Rename
 $("#zFit").title = "Show the whole picture";
 $("#viewDel").onclick = async () => {
   if (layout.views.length < 2) { toast("You need at least one view", true); return; }
-  const v = curView(); if (!await ask("Remove view", `Remove “${v.name}” and its pins${v.image ? " and photo" : ""}?`, "", false)) return;
-  layout.views = layout.views.filter(x => x.id !== v.id); delete layout.pins[v.id]; if (layout.clusters) delete layout.clusters[v.id]; viewId = layout.views[0].id; saveLayout(true); renderMap();
+  const v = curView(); if (!await ask("Remove view", v.image ? `Remove “${v.name}” and its photo (with the photo's pins)?` : `Remove the “${v.name}” tab? Pins stay with the drawing and come back if another view uses it.`, "", false)) return;
+  layout.views = layout.views.filter(x => x.id !== v.id); viewId = layout.views[0].id; saveLayout(true); renderMap();
 };
 document.addEventListener("keydown", e => { if (e.key === "Escape" && wizard) stopWizard(); else if (e.key === "Escape" && placing) stopPlacing(); });
 
@@ -949,7 +954,7 @@ const CL_DIRS = ["up", "right", "down", "left", "center"];
 const CL_GLYPH = {up: "▲", right: "▶", down: "▼", left: "◀", center: "●"};
 const CL_WORD = {up: "UP", right: "RIGHT", down: "DOWN", left: "LEFT", center: "IN (center push)"};
 let wizard = null;
-function allClusters() { return Object.entries(layout?.clusters || {}).flatMap(([vid, list]) => list.map(c => ({...c, view: vid}))); }
+function allClusters() { return layout?.hats || []; }
 function clusterOf(n) {
   for (const c of allClusters()) for (const [d, b] of Object.entries(c.dirs)) if (b === n) return {c, dir: d};
   return null;
@@ -986,9 +991,9 @@ function detectWizard(m) {
 }
 function finishWizard(xy) {
   if (Object.keys(wizard.dirs).length < 2) { stopWizard("A hat needs at least 2 directions"); return; }
-  const v = curView(), list = (layout.clusters ||= {})[v.id] ||= [];
-  let id = "c" + Date.now().toString(36).slice(-6);
-  list.push({id, name: wizard.name, xy, dirs: {...wizard.dirs}});
+  const id = "c" + Date.now().toString(36).slice(-6);
+  (layout.hats ||= []).push({id, name: wizard.name, dirs: {...wizard.dirs}});
+  curPins()[`c:${id}`] = xy;
   // a button lives either in a cluster or as its own pin, not both
   let removed = 0;
   for (const pins of Object.values(layout.pins)) for (const b of Object.values(wizard.dirs)) if (pins[b]) { delete pins[b]; removed++; }
@@ -997,17 +1002,25 @@ function finishWizard(xy) {
 }
 function renderClusters(cv, v, rev) {
   refs.segs = {};
-  for (const c of (layout.clusters?.[v.id] || [])) {
+  const pins = layout.pins[picKey(v)] || {};
+  for (const c of allClusters()) {
+    const xy = pins[`c:${c.id}`]; if (!xy) continue;   // not placed on this picture
     const box = el("div", "cluster"); box.dataset.id = c.id;
-    box.style.left = c.xy[0] * 100 + "%"; box.style.top = c.xy[1] * 100 + "%";
+    box.style.left = xy[0] * 100 + "%"; box.style.top = xy[1] * 100 + "%";
     for (const d of CL_DIRS) {
       if (!(d in c.dirs)) continue;
       const b = c.dirs[d], seg = el("div", `seg ${d}` + ((rev[String(b)] || []).length ? "" : " unmapped"), CL_GLYPH[d]);
       seg.title = `${c.name} ${d}: button ${b}`; refs.segs[b] = seg; box.append(seg);
     }
     box.append(el("span", "name", c.name));
-    const x = el("button", "x", "×"); x.title = "Remove this hat"; x.onpointerdown = e => e.stopPropagation();
-    x.onclick = e => { e.stopPropagation(); layout.clusters[v.id] = layout.clusters[v.id].filter(k => k.id !== c.id); saveLayout(); renderOutputs(); };
+    const x = el("button", "x", "×"); x.title = "Remove this hat from this drawing"; x.onpointerdown = e => e.stopPropagation();
+    x.onclick = async e => {
+      e.stopPropagation(); delete curPins()[`c:${c.id}`];
+      const elsewhere = Object.values(layout.pins).some(p => p[`c:${c.id}`]);
+      if (!elsewhere && await ask("Delete hat setup?", `“${c.name}” isn't on any other drawing now. Delete its setup too? (Cancel keeps it, so its buttons still show the hat badge and you can place it again.)`, "", false))
+        layout.hats = layout.hats.filter(h => h.id !== c.id);
+      saveLayout(); renderOutputs();
+    };
     box.append(x);
     box.onmouseenter = e => { showClusterTip(c, e); for (const b of Object.values(c.dirs)) crossHighlight(String(b), true); };
     box.onmousemove = e => moveTip(e);
@@ -1033,7 +1046,8 @@ function startClusterDrag(e, box, c) {
   if (!placing) return;
   e.preventDefault(); box.setPointerCapture(e.pointerId);
   const r = $("#canvas").getBoundingClientRect();
-  const move = ev => { const x = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), y = Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height)); box.style.left = x * 100 + "%"; box.style.top = y * 100 + "%"; c.xy = [+x.toFixed(4), +y.toFixed(4)]; };
+  const pins = curPins();
+  const move = ev => { const x = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), y = Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height)); box.style.left = x * 100 + "%"; box.style.top = y * 100 + "%"; pins[`c:${c.id}`] = [+x.toFixed(4), +y.toFixed(4)]; };
   const up = () => { box.removeEventListener("pointermove", move); box.removeEventListener("pointerup", up); saveLayout(); };
   box.addEventListener("pointermove", move); box.addEventListener("pointerup", up);
 }
@@ -1067,7 +1081,7 @@ function connect() {
   try {
     const [r, l] = await Promise.all([api("GET", "/api/mapping"), api("GET", "/api/layout")]);
     mapping = r.mapping; layout = l.layout;
-    if (l.api !== 4) {  // page updated on disk but an older mapper server is still running
+    if (l.api !== 5) {  // page updated on disk but an older mapper server is still running
       layout = null;
       for (const sel of [".maptools", ".stage"]) document.querySelector(sel).hidden = true;
       $("#placeHint").textContent = "Stick map unavailable: restart HOTAS Mapper (an older version is still running).";

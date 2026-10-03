@@ -35,7 +35,7 @@ python3 -c 'import evdev' 2>/dev/null || die "python-evdev missing for root's py
   Fedora: dnf install python3-evdev   other: pip install evdev (system-wide)"
 
 if [[ ${list:-} ]]; then
-    PYTHONPATH=$here python3 - <<'PY'
+    PYTHONPATH=$here/common python3 - <<'PY'
 import evdev
 from evdev import ecodes as E
 for p in evdev.list_devices():
@@ -53,11 +53,11 @@ modprobe uhid 2>/dev/null || true
 echo uhid > /etc/modules-load.d/vkb-hotas.conf
 
 # config: keep the user's file, install the template otherwise
-[[ -e $conf ]] || install -Dm644 "$here/vkb-hotas.default" "$conf"
+[[ -e $conf ]] || install -Dm644 "$here/service/vkb-hotas.default" "$conf"
 grep -q '^VKB_HOTAS_DEVICE=' "$conf" || printf '\nVKB_HOTAS_DEVICE=""\n' >> "$conf"
 [[ -n $device ]] || device=$(sed -n 's/^VKB_HOTAS_DEVICE="\{0,1\}\([^"#]*\)"\{0,1\}.*/\1/p' "$conf" | tr -d ' ')
 if [[ -z $device || $device != *:* ]]; then
-    device=$(PYTHONPATH=$here python3 -c '
+    device=$(PYTHONPATH=$here/common python3 -c '
 import sys
 from vkb_common import find_one
 d = find_one(sys.argv[1])
@@ -81,16 +81,16 @@ else
     echo "warning: no desktop user set; vkb-mapper won't be able to talk to the daemon (use --user NAME)"
 fi
 
-install -Dm755 "$here/vkb-hotas.py"  "$lib/vkb-hotas.py"
-install -Dm644 "$here/vkb_common.py" "$lib/vkb_common.py"
+install -Dm755 "$here/service/vkb-hotas.py"  "$lib/vkb-hotas.py"
+install -Dm644 "$here/common/vkb_common.py" "$lib/vkb_common.py"
 install -Dm644 "$here/README.md"     "$lib/README.md"
-install -Dm755 "$here/vkb-mapper.py"   "$lib/vkb-mapper.py"
-install -Dm644 "$here/vkb-mapper.html" "$lib/vkb-mapper.html"
+install -Dm755 "$here/mapper/vkb-mapper.py"   "$lib/vkb-mapper.py"
+install -Dm644 "$here/mapper/vkb-mapper.html" "$lib/vkb-mapper.html"
 ln -sf "$lib/vkb-mapper.py" /usr/local/bin/vkb-mapper
-install -Dm644 "$here/vkb-mapper.desktop" /usr/local/share/applications/vkb-mapper.desktop
-sed -e "s/@VID@/$vid/g" -e "s/@PID@/$pid/g" "$here/72-vkb-hotas.rules.in" > "$rules"
+install -Dm644 "$here/mapper/vkb-mapper.desktop" /usr/local/share/applications/vkb-mapper.desktop
+sed -e "s/@VID@/$vid/g" -e "s/@PID@/$pid/g" "$here/service/72-vkb-hotas.rules.in" > "$rules"
 chmod 644 "$rules"
-install -Dm644 "$here/vkb-hotas.service" /etc/systemd/system/vkb-hotas.service
+install -Dm644 "$here/service/vkb-hotas.service" /etc/systemd/system/vkb-hotas.service
 
 systemctl daemon-reload
 udevadm control --reload
