@@ -3,6 +3,8 @@
 Use a VKB flight stick (or any other evdev joystick) in Proton games that only
 accept HOTAS models they know, by re-presenting it as a **Thrustmaster T.16000M**.
 
+> **Note:** this project was vibe coded with Claude Opus 5.5.
+
 Some games, such as *Ace Combat 8: Wings of Theve* and *Star Wars: Squadrons*,
 only enable their flight-stick controls for specific sticks. Under Proton,
 DirectInput sees an unsupported stick correctly as a joystick, but the game
@@ -91,9 +93,23 @@ A local page opens in your browser:
   - **Test** presses that button in-game for a moment, so you can work out what
     each T.16000M button does in a game, then note it in the slot's label.
   - Axes: pick the source (or **Learn** by moving it), invert, and set a center deadzone.
+- **Stick map:** a picture of your stick with a pin on each button. Pins glow when pressed and are
+  tagged with what they drive; hover one for details, and its game-button card lights up (and vice
+  versa). Click **Place pins**, press a button on the stick, then click where it is (drag to adjust,
+  × to remove). The default views are drawings of the Gladiator NXT EVO Omni Throttle (whole
+  stick, SCG grip head, base front); generic outlines are available for other sticks. Add your own
+  views, and swap any drawing for a photo of your stick with **Photo…** (PNG/JPEG/WebP, up to
+  10 MB). VKB button numbering depends on grip and firmware profile, so pins are placed by you
+  rather than pre-filled.
+- **5-way hats:** VKB's 4-way hats with center push report as five separate buttons. Click
+  **+ 5-way hat**, name it, push up, right, down and left, press it in (or choose "No center
+  push"), then click where it is. It's drawn as one cross-shaped widget. Each segment lights up
+  and dims when unmapped, hovering shows every direction's mapping, and double-clicking renames
+  it. Its buttons are still mapped individually in the cards.
 - **Profiles:** keep one per game. The selected profile is the one applied.
 
-Changes save to `~/.config/vkb-hotas/mapping.json` and the daemon applies them
+Changes save to `~/.config/vkb-hotas/mapping.json` (the stick map to `layout.json` and
+`images/` beside it, shared by all profiles) and the daemon applies them
 within half a second, even mid-game. No sudo or restart is needed. Switching
 between 16 and 32 buttons briefly re-creates the virtual stick, so do that with
 the game closed.
@@ -102,6 +118,11 @@ The mapper talks to the daemon over `/run/vkb-hotas/ctl.sock`, which only the
 user in `VKB_HOTAS_USER` can open (the installer sets it to whoever ran
 `sudo`). The web UI listens on 127.0.0.1 only, needs a per-session token, and
 exits about 45 s after its last tab closes.
+
+After updating (re-running `sudo ./install.sh`), close HOTAS Mapper and reopen it once it
+has exited. An older mapper still running would serve the new page, so the page detects
+that and disables the stick map until you restart. Stick maps saved before an update keep
+their views and drawings; pick a new drawing per view from the dropdown next to **Photo…**.
 
 ## Configuration
 

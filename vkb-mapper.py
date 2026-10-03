@@ -14,9 +14,11 @@ No extra packages needed. The server listens on 127.0.0.1 only, requires a
 per-session token, and exits shortly after the last browser tab closes.
 """
 import argparse
+import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import shlex
 import signal
@@ -39,6 +41,7 @@ CTL = os.environ.get("VKB_HOTAS_CTL", "/run/vkb-hotas/ctl.sock")
 PAGE = os.path.join(HERE, "vkb-mapper.html")
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "vkb-mapper")
 IDLE_EXIT = 45  # seconds without any open UI before the server quits
+API_VERSION = 2  # bump when the page needs server features; the page refuses to edit layouts on a mismatch
 
 
 def initial_mapping():
@@ -58,9 +61,111 @@ def initial_mapping():
     return normalize_mapping({"active": "Default", "profiles": {"Default": default_profile(count, axes, invert)}})
 
 
+# ---- Stick layout (pictures + pin positions) ------------------------------------
+# layout.json lives next to mapping.json. It describes the hardware, not a game, so
+# it's shared by all profiles and the daemon never reads it.
+#   {"version": 1,
+#    "views": [{"id": "stick", "name": "Whole stick", "schematic": "evo-ot-side", "image": null | "x-1a2b3c4d.jpg"}],
+#    "pins": {"stick": {"17": [0.42, 0.31], "hat": [0.5, 0.12]}},
+#    "clusters": {"head": [{"id": "c1", "name": "Hat 2", "xy": [0.3, 0.2],
+#                           "dirs": {"up": 11, "right": 12, "down": 13, "left": 14, "center": 15}}]}}
+# Pin keys: physical button numbers ("1".."128") or "hat" (the stick's real hat); coordinates
+# are 0..1 fractions. Clusters are multi-way hats that report as separate buttons (VKB's 4-way
+# hats with center push); each direction is learned by pressing it.
+SCHEMATICS = ("evo-ot-side", "evo-scg-head", "evo-base-front", "grip-front", "grip-back", "base")
+CLUSTER_DIRS = ("up", "right", "down", "left", "center")
+DEFAULT_LAYOUT = {"version": 1, "views": [
+    {"id": "stick", "name": "Whole stick", "schematic": "evo-ot-side", "image": None},
+    {"id": "head", "name": "Grip head", "schematic": "evo-scg-head", "image": None},
+    {"id": "base", "name": "Base front", "schematic": "evo-base-front", "image": None}],
+    "pins": {}, "clusters": {}}
+IMAGE_TYPES = {b"\x89PNG\r\n\x1a\n": "png", b"\xff\xd8\xff": "jpg"}
+IMAGE_MAX = 10 << 20
+IMAGE_NAME = re.compile(r"^[a-z0-9_-]{1,24}-[0-9a-f]{8}\.(png|jpg|webp)$")
+VIEW_ID = re.compile(r"^[a-z0-9_-]{1,24}$")
+
+
+def image_kind(data):
+    for magic, ext in IMAGE_TYPES.items():
+        if data.startswith(magic):
+            return ext
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+def normalize_layout(lay):
+    if not isinstance(lay, dict) or not isinstance(lay.get("views"), list) or not lay["views"]:
+        raise ValueError("layout needs a non-empty 'views' list")
+    if len(lay["views"]) > 8:
+        raise ValueError("at most 8 views")
+    views, ids = [], set()
+    for v in lay["views"]:
+        if not isinstance(v, dict) or not VIEW_ID.match(str(v.get("id", ""))) or v["id"] in ids:
+            raise ValueError("each view needs a unique id (a-z, 0-9, _ -)")
+        name = str(v.get("name") or v["id"]).strip()[:30]
+        sch = v.get("schematic") if v.get("schematic") in SCHEMATICS else SCHEMATICS[0]
+        img = v.get("image")
+        if img is not None and not (isinstance(img, str) and IMAGE_NAME.match(img)):
+            raise ValueError(f"view {v['id']}: bad image name")
+        ids.add(v["id"])
+        views.append({"id": v["id"], "name": name, "schematic": sch, "image": img})
+    pins = {}
+    for vid, vp in (lay.get("pins") or {}).items():
+        if vid not in ids or not isinstance(vp, dict):
+            continue  # pins of a removed view are dropped
+        clean = {}
+        for key, xy in vp.items():
+            if not (key == "hat" or (key.isdigit() and 1 <= int(key) <= 128)):
+                raise ValueError(f"pin {key!r}: must be a button number or 'hat'")
+            if not (isinstance(xy, list) and len(xy) == 2 and all(isinstance(c, (int, float)) and 0 <= c <= 1 for c in xy)):
+                raise ValueError(f"pin {key!r}: coordinates must be two numbers 0..1")
+            clean[key] = [round(xy[0], 4), round(xy[1], 4)]
+        pins[vid] = clean
+    clusters = {}
+    for vid, cl in (lay.get("clusters") or {}).items():
+        if vid not in ids or not isinstance(cl, list):
+            continue
+        if len(cl) > 16:
+            raise ValueError("at most 16 multi-way hats per view")
+        out, cids = [], set()
+        for c in cl:
+            if not isinstance(c, dict) or not VIEW_ID.match(str(c.get("id", ""))) or c["id"] in cids:
+                raise ValueError("each multi-way hat needs a unique id")
+            xy = c.get("xy")
+            if not (isinstance(xy, list) and len(xy) == 2 and all(isinstance(v, (int, float)) and 0 <= v <= 1 for v in xy)):
+                raise ValueError(f"hat {c['id']}: position must be two numbers 0..1")
+            dirs = c.get("dirs")
+            if not isinstance(dirs, dict) or len(dirs) < 2 or not set(dirs) <= set(CLUSTER_DIRS):
+                raise ValueError(f"hat {c['id']}: needs at least 2 of {', '.join(CLUSTER_DIRS)}")
+            if not all(isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= 128 for n in dirs.values()):
+                raise ValueError(f"hat {c['id']}: directions must be button numbers 1-128")
+            cids.add(c["id"])
+            out.append({"id": c["id"], "name": str(c.get("name") or "Hat").strip()[:24],
+                        "xy": [round(xy[0], 4), round(xy[1], 4)], "dirs": {d: dirs[d] for d in CLUSTER_DIRS if d in dirs}})
+        clusters[vid] = out
+    return {"version": 1, "views": views, "pins": pins, "clusters": clusters}
+
+
+def write_json(path, obj):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".tmp.", suffix=".json")
+    with os.fdopen(fd, "w") as f:
+        json.dump(obj, f, indent=2)
+    os.replace(tmp, path)
+
+
 class State:
     token = secrets.token_urlsafe(24)
     path = mapping_path()
+
+    @classmethod
+    def layout_path(cls):
+        return os.path.join(os.path.dirname(cls.path), "layout.json")
+
+    @classmethod
+    def image_dir(cls):
+        return os.path.join(os.path.dirname(cls.path), "images")
     clients = 0
     last_seen = time.monotonic()
     lock = threading.Lock()
@@ -135,6 +240,25 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError, ValueError) as e:
                 m, err = initial_mapping(), str(e)
             self._send(200, {"mapping": m, "path": State.path, "exists": exists, "error": err})
+        elif path == "/api/layout":
+            try:
+                lay = normalize_layout(json.load(open(State.layout_path())))
+                err = None
+            except FileNotFoundError:
+                lay, err = DEFAULT_LAYOUT, None
+            except (OSError, ValueError) as e:
+                lay, err = DEFAULT_LAYOUT, str(e)
+            self._send(200, {"layout": lay, "error": err, "api": API_VERSION})
+        elif path.startswith("/api/image/"):
+            name = path.rsplit("/", 1)[1]
+            if not IMAGE_NAME.match(name):
+                return self._send(404, {"error": "not found"})
+            try:
+                data = open(os.path.join(State.image_dir(), name), "rb").read()
+            except OSError:
+                return self._send(404, {"error": "not found"})
+            ctype = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}[name.rsplit(".", 1)[1]]
+            self._send(200, data, ctype)
         elif path == "/api/events":
             self._events()
         else:
@@ -144,6 +268,8 @@ class Handler(BaseHTTPRequestHandler):
         path = self._guard()
         if path is None:
             return
+        if path == "/api/layout":
+            return self._put_layout()
         if path != "/api/mapping":
             return self._send(404, {"error": "not found"})
         try:
@@ -162,6 +288,8 @@ class Handler(BaseHTTPRequestHandler):
         path = self._guard()
         if path is None:
             return
+        if path == "/api/image":
+            return self._upload_image()
         if path != "/api/pulse":
             return self._send(404, {"error": "not found"})
         try:
@@ -181,6 +309,39 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"ok": True})
         except (OSError, ValueError, TypeError, AttributeError) as e:
             self._send(503, {"error": f"daemon not reachable: {e}"})
+
+    def _put_layout(self):
+        try:
+            lay = normalize_layout(self._body())
+        except (ValueError, TypeError) as e:
+            return self._send(400, {"error": str(e)})
+        with State.lock:
+            write_json(State.layout_path(), lay)
+            # remove pictures no view references any more
+            used = {v["image"] for v in lay["views"] if v["image"]}
+            for f in os.listdir(State.image_dir()) if os.path.isdir(State.image_dir()) else []:
+                if IMAGE_NAME.match(f) and f not in used:
+                    os.unlink(os.path.join(State.image_dir(), f))
+        self._send(200, {"layout": lay})
+
+    def _upload_image(self):
+        """Raw image body; ?view=<id>. Returns the stored file name (the client then saves the layout)."""
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        view = q.get("view", [""])[0]
+        n = int(self.headers.get("Content-Length") or 0)
+        if not VIEW_ID.match(view):
+            return self._send(400, {"error": "bad view id"})
+        if not 0 < n <= IMAGE_MAX:
+            return self._send(413, {"error": f"images must be under {IMAGE_MAX >> 20} MB"})
+        data = self.rfile.read(n)
+        ext = image_kind(data)
+        if not ext:
+            return self._send(415, {"error": "only PNG, JPEG or WebP images"})
+        name = f"{view}-{secrets.token_hex(4)}.{ext}"
+        os.makedirs(State.image_dir(), exist_ok=True)
+        with open(os.path.join(State.image_dir(), name), "wb") as f:
+            f.write(data)
+        self._send(200, {"image": name})
 
     def _events(self):
         """Server-sent events relaying the daemon's JSON lines; reconnects if the daemon restarts."""
@@ -230,10 +391,17 @@ class Handler(BaseHTTPRequestHandler):
                 State.last_seen = time.monotonic()
 
 
+def url_file():
+    """Single-instance file, keyed by mapping file + daemon socket so test instances
+    (--mapping / VKB_HOTAS_CTL) never hand over to the real one."""
+    key = hashlib.sha256(f"{State.path}\0{CTL}".encode()).hexdigest()[:12]
+    return os.path.join(STATE_DIR, f"url-{key}")
+
+
 def existing_instance():
     """URL of an already running mapper, if any."""
     try:
-        url = open(os.path.join(STATE_DIR, "url")).read().strip()
+        url = open(url_file()).read().strip()
         u = urllib.parse.urlparse(url)
         tok = urllib.parse.parse_qs(u.query)["t"][0]
         req = urllib.request.Request(f"{u.scheme}://{u.netloc}/api/mapping", headers={"X-Token": tok})
@@ -241,7 +409,7 @@ def existing_instance():
         return url
     except Exception:
         try:
-            os.unlink(os.path.join(STATE_DIR, "url"))  # stale: left by a killed instance
+            os.unlink(url_file())  # stale: left by a killed instance
         except OSError:
             pass
         return None
@@ -268,7 +436,7 @@ def main():
     srv.daemon_threads = True
     url = f"http://127.0.0.1:{srv.server_address[1]}/?t={State.token}"
     os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
-    fd = os.open(os.path.join(STATE_DIR, "url"), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = os.open(url_file(), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     os.write(fd, url.encode())
     os.close(fd)
     print(f"vkb-mapper: {url}\n(mapping file: {State.path}; Ctrl+C to quit)", flush=True)
@@ -296,7 +464,7 @@ def main():
         pass
     finally:
         try:
-            os.unlink(os.path.join(STATE_DIR, "url"))
+            os.unlink(url_file())
         except OSError:
             pass
 

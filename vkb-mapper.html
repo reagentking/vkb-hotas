@@ -164,6 +164,51 @@ input[type=range]{accent-color:var(--cyan);width:100%}
 .toast{padding:10px 14px;border-radius:5px;background:var(--panel2);border:1px solid var(--line2);font:12.5px var(--sans);box-shadow:0 8px 24px rgba(0,0,0,.4);animation:in .2s ease-out}
 .toast.err{border-color:rgba(255,93,108,.5)}
 @keyframes in{from{transform:translateY(8px);opacity:0}}
+/* stick map */
+.maptools{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:10px}
+.tabs{display:inline-flex;border:1px solid var(--line2);border-radius:4px;overflow:hidden;margin-right:6px}
+.tabs button{background:var(--panel2);border:0;border-right:1px solid var(--line2);padding:6px 11px;font:600 11px var(--mono);letter-spacing:.06em;color:var(--muted)}
+.tabs button:last-child{border-right:0}
+.tabs button.on{background:var(--amber-d);color:var(--amber)}
+.btn.on{border-color:var(--amber);color:var(--amber);background:var(--amber-d)}
+.stage{display:flex;justify-content:center;padding:12px;border:1px solid var(--line);border-radius:5px;background:radial-gradient(circle at 50% 40%,rgba(255,181,71,.05),transparent 70%),#070b10;position:relative}
+.canvas{position:relative;display:inline-block;line-height:0;touch-action:none}
+.canvas img{max-height:460px;max-width:100%;border-radius:4px;user-select:none;-webkit-user-drag:none}
+.canvas svg{width:min(340px,100%);height:auto}
+.canvas.placing{cursor:crosshair}
+.watermark{position:absolute;right:10px;bottom:8px;white-space:nowrap;font:10px var(--mono);color:var(--dim);letter-spacing:.08em;line-height:1.2}
+.pin{position:absolute;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+  font:700 10px/1 var(--mono);color:var(--amber);background:rgba(10,14,20,.88);border:1.5px solid rgba(255,181,71,.65);
+  box-shadow:0 0 0 3px rgba(0,0,0,.35);transition:background .08s,box-shadow .08s,color .08s;cursor:default;z-index:2}
+.pin.hat{border-style:dashed;font-size:12px}
+.pin.on{background:var(--amber);color:#1b1205;box-shadow:0 0 0 3px rgba(0,0,0,.35),0 0 16px rgba(255,181,71,.8)}
+.pin.xhl{box-shadow:0 0 0 3px rgba(70,229,255,.55),0 0 14px rgba(70,229,255,.5)}
+.pin .tag{position:absolute;left:28px;top:50%;transform:translateY(-50%);white-space:nowrap;font:600 9.5px var(--mono);color:var(--cyan);
+  background:rgba(6,10,15,.85);padding:2px 5px;border-radius:3px;border:1px solid rgba(70,229,255,.25);pointer-events:none}
+.pin .tag.none{color:var(--dim);border-color:var(--line)}
+.pin .x{display:none;position:absolute;top:-9px;right:-9px;width:16px;height:16px;border-radius:50%;border:0;background:var(--red);color:#fff;font:700 10px/16px var(--sans);padding:0}
+.placing .pin{cursor:grab}
+.placing .pin .x{display:block}
+.placing .pin .tag{display:none}
+#tip{position:fixed;z-index:70;pointer-events:none;max-width:280px;padding:9px 11px;border-radius:5px;background:rgba(8,13,19,.97);border:1px solid var(--line2);font:12px var(--sans);box-shadow:0 8px 24px rgba(0,0,0,.45)}
+#tip[hidden]{display:none}
+#tip b{font:700 12px var(--mono);color:var(--amber)}
+#tip .row{display:flex;gap:6px;margin-top:4px}
+#tip .t{font:600 11px var(--mono);color:var(--cyan);min-width:54px}
+#tip .muted{color:var(--muted)}
+.cluster{position:absolute;transform:translate(-50%,-50%);width:60px;height:60px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:2px;z-index:2}
+.cluster .seg{display:grid;place-items:center;border-radius:4px;background:rgba(10,14,20,.9);border:1.5px solid rgba(255,181,71,.65);color:var(--amber);font:700 9px/1 var(--mono);transition:background .08s,box-shadow .08s}
+.cluster .seg.up{grid-area:1/2}.cluster .seg.left{grid-area:2/1}.cluster .seg.center{grid-area:2/2;border-radius:50%}.cluster .seg.right{grid-area:2/3}.cluster .seg.down{grid-area:3/2}
+.cluster .seg.unmapped{border-color:var(--dim);color:var(--dim)}
+.cluster .seg.on{background:var(--amber);color:#1b1205;box-shadow:0 0 14px rgba(255,181,71,.8)}
+.cluster .seg.xhl{box-shadow:0 0 0 2px rgba(70,229,255,.7),0 0 12px rgba(70,229,255,.5)}
+.cluster .name{position:absolute;left:50%;top:100%;transform:translateX(-50%);margin-top:3px;white-space:nowrap;font:600 9.5px var(--mono);color:var(--muted);background:rgba(6,10,15,.85);padding:1px 5px;border-radius:3px;pointer-events:none}
+.cluster .x{display:none;position:absolute;top:-8px;right:-8px;width:16px;height:16px;border-radius:50%;border:0;background:var(--red);color:#fff;font:700 10px/16px var(--sans);padding:0}
+.placing .cluster{cursor:grab}
+.placing .cluster .x{display:block}
+.placehint .btn{margin-left:8px}
+.placehint{margin-top:8px;font:12px var(--mono);color:var(--amber);min-height:18px}
+.card.xhl{border-color:rgba(255,181,71,.7);box-shadow:0 0 14px rgba(255,181,71,.2)}
 footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:center}
 .offline main{opacity:.75}
 </style>
@@ -199,6 +244,22 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
   <section class="panel phys">
     <h2>Your stick</h2>
     <p class="sub">Live input from the physical device. Lit tiles are pressed; the cyan tag shows which emulated control each button drives.</p>
+    <h3>Stick map</h3>
+    <div class="maptools">
+      <div class="tabs" id="viewTabs"></div>
+      <button class="btn small" id="placeBtn" title="Press a button on your stick, then click where it is">Place pins</button>
+      <button class="btn small" id="hatAddBtn" title="Set up a 4-way hat with center push (it reports as 5 buttons)">+ 5-way hat</button>
+      <button class="btn small" id="photoBtn" title="Use a photo of your stick for this view">Photo…</button>
+      <select id="schemSel" title="Drawn outline for this view"><optgroup label="VKB Gladiator NXT EVO"><option value="evo-ot-side">Omni Throttle (whole)</option><option value="evo-scg-head">SCG grip head</option><option value="evo-base-front">EVO base (front)</option></optgroup><optgroup label="Generic"><option value="grip-front">Grip (front)</option><option value="grip-back">Grip (side)</option><option value="base">Base</option></optgroup></select>
+      <button class="btn small" id="schemBtn" title="Remove the photo and use the drawing">Use drawing</button>
+      <span class="spacer"></span>
+      <button class="btn small" id="viewAdd">+ View</button>
+      <button class="btn small" id="viewRen">Rename</button>
+      <button class="btn small danger" id="viewDel">Remove</button>
+      <input type="file" id="photoFile" accept="image/png,image/jpeg,image/webp" hidden>
+    </div>
+    <div class="stage"><div class="canvas" id="canvas"></div><div class="watermark" id="watermark">schematic · add a photo for exact positions</div></div>
+    <div class="placehint" id="placeHint"></div>
     <h3>Axes</h3>
     <div class="axes" id="physAxes"><span class="hint">waiting for the daemon…</span></div>
     <h3>Hat</h3>
@@ -225,6 +286,7 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
 
 <div id="modal" hidden><div class="box"><h4 id="mTitle"></h4><p id="mText"></p><input class="input" id="mInput" maxlength="40"><div class="row"><button class="btn" id="mCancel">Cancel</button><button class="btn" id="mOk">OK</button></div></div></div>
 <div id="toasts"></div>
+<div id="tip" hidden></div>
 
 <script>
 "use strict";
@@ -237,7 +299,7 @@ const ARROW = {up:"↑",down:"↓",left:"←",right:"→"};
 const HATVAL = [[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]];
 
 let mapping = null, hello = null, live = null, learn = null, saveTimer = null;
-const refs = {pb:[], cards:{}, hatCards:{}, physAx:{}, emuAx:{}, physHat:{}, emuHat:{}};
+const refs = {pb:[], cards:{}, hatCards:{}, physAx:{}, emuAx:{}, physHat:{}, emuHat:{}, pins:{}, segs:{}};
 
 // ---------- api ----------
 async function api(method, path, body) {
@@ -340,6 +402,8 @@ function card(kind, key) {
   acts.append(a);
   if (kind === "b") { const t = el("button", "btn small", "Test"); t.title = "Press this button in-game for a moment"; t.onclick = () => pulse(+key); acts.append(t); }
   c.append(top, lab, chips, acts);
+  c.onmouseenter = () => cardHighlight(kind, key, true);
+  c.onmouseleave = () => cardHighlight(kind, key, false);
   return c;
 }
 
@@ -350,6 +414,7 @@ function renderOutputs() {
   for (const [d] of HATS) { const c = card("h", d); refs.hatCards[d] = c; hb.append(c); }
   renderPhysTags();
   markLearning();
+  renderMap();  // pin tags show the new mapping
 }
 
 function renderPhys() {
@@ -372,7 +437,7 @@ function renderPhysTags() {
   refs.pb.forEach((b, i) => { if (!b) return; const t = tags[i] || []; b.lastChild.textContent = t.length ? "→" + t.join(",") : ""; b.classList.toggle("mapped", t.length > 0); b.title = t.length ? `Button ${i} drives ${t.join(", ")}` : `Button ${i}: not used`; });
 }
 
-function renderAll() { renderProfileBar(); renderEmuAxes(); renderOutputs(); renderPhys(); }
+function renderAll() { renderProfileBar(); renderEmuAxes(); renderOutputs(); renderPhys(); renderMap(); }
 
 // ---------- live state ----------
 function onState(m) {
@@ -388,7 +453,10 @@ function onState(m) {
   for (const [d, c] of Object.entries(refs.hatCards)) c.classList.toggle("on", hatOn(d, ox, oy));
   if (hello) for (const [ax, r] of Object.entries(refs.emuAx)) setTrack(r, m.out.a[ax] / (hello.emulated.axes[ax] || 1));
   document.querySelectorAll(".chip").forEach(c => { const s = c.dataset.src; c.classList.toggle("on", /^\d+$/.test(s) ? pressed.has(+s) : hatOn(s.slice(4), hx, hy)); });
+  updateMapLive(m);
   if (learn) detectLearn(m);
+  else if (wizard) detectWizard(m);
+  else if (placing) detectPlacing(m);
 }
 function hatOn(k, x, y) {
   if (k === "c") return x === 0 && y === 0 && false;
@@ -400,6 +468,7 @@ function hatOn(k, x, y) {
 
 // ---------- learn mode ----------
 function startLearn(target, ev) {
+  if (placing || wizard) { placing = null; wizard = null; renderMap(); }
   if (!live) { toast("The daemon isn't running, so live input isn't available. Start vkb-hotas first.", true); return; }
   learn = {...target, add: !!(ev && ev.shiftKey), base: JSON.parse(JSON.stringify(live.raw))};
   const what = target.type === "axis" ? `the axis for ${target.axis}` : `a button or hat direction for ${outName(target.kind, target.key)}`;
@@ -498,6 +567,355 @@ $("#count").onclick = e => {
 $("#learnCancel").onclick = stopLearn;
 document.addEventListener("keydown", e => { if (e.key === "Escape" && learn) stopLearn(); });
 
+// ---------- stick map ----------
+let layout = null, viewId = null, placing = null, layoutTimer = null;
+const SCHEM = {
+  "evo-ot-side": `<svg viewBox="0 0 400 500" aria-hidden="true">
+    <defs><linearGradient id="otA" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1a2733"/><stop offset="1" stop-color="#0b1219"/></linearGradient>
+      <linearGradient id="otB" x1="0" x2="1"><stop offset="0" stop-color="#1c2a37"/><stop offset="1" stop-color="#0d151d"/></linearGradient></defs>
+    <path d="M40 470 L360 470 L352 484 L48 484 Z" fill="#0b1117" stroke="#33465c" stroke-width="2"/>
+    <path d="M60 470 L340 470 L300 352 Q295 340 282 340 L118 340 Q105 340 100 352 Z" fill="url(#otA)" stroke="#33465c" stroke-width="2"/>
+    <path d="M116 398 L284 398 L304 456 L96 456 Z" fill="#0e161e" stroke="#26364a" stroke-width="1.5"/>
+    <rect x="189" y="406" width="22" height="44" rx="5" fill="#16222e" stroke="#3a5068" stroke-width="1.5"/>
+    <path d="M192 414 H208 M192 421 H208 M192 428 H208 M192 435 H208 M192 442 H208" stroke="#26364a" stroke-width="1.5"/>
+    <rect x="138" y="414" width="12" height="28" rx="4" fill="#16222e" stroke="#3a5068" stroke-width="1.5"/>
+    <circle cx="258" cy="428" r="11" fill="#16222e" stroke="#3a5068" stroke-width="1.5"/><circle cx="258" cy="428" r="4" fill="#26364a"/>
+    <rect x="146" y="360" width="26" height="12" rx="4" fill="#111b25" stroke="#3a5068" stroke-width="1.5"/>
+    <rect x="187" y="358" width="26" height="12" rx="4" fill="#111b25" stroke="#3a5068" stroke-width="1.5"/>
+    <rect x="228" y="360" width="26" height="12" rx="4" fill="#111b25" stroke="#3a5068" stroke-width="1.5"/>
+    <ellipse cx="200" cy="340" rx="40" ry="9" fill="#0d151d" stroke="#33465c" stroke-width="2"/>
+    <rect x="186" y="270" width="28" height="70" rx="3" fill="url(#otB)" stroke="#33465c" stroke-width="2"/>
+    <path d="M214 258 L214 288 L118 288 L118 232 L152 232 L152 258 Z" fill="#141f2a" stroke="#33465c" stroke-width="2"/>
+    <g transform="translate(135 238) rotate(38)">
+      <rect x="-40" y="-14" width="78" height="18" rx="5" fill="#111b25" stroke="#33465c" stroke-width="2"/>
+      <path d="M-34 -12 L-30 -168 Q-29 -186 -12 -190 L20 -190 Q36 -186 36 -168 L32 -12 Z" fill="url(#otB)" stroke="#33465c" stroke-width="2"/>
+      <path d="M-30 -150 Q-62 -148 -64 -120 Q-62 -106 -30 -110" fill="#111b25" stroke="#33465c" stroke-width="2"/>
+      <path d="M-42 -184 Q-50 -270 4 -284 Q60 -292 66 -238 Q70 -202 42 -184 Z" fill="url(#otA)" stroke="#33465c" stroke-width="2"/>
+      <circle cx="-14" cy="-250" r="12" fill="none" stroke="#3a5068" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <circle cx="28" cy="-252" r="12" fill="none" stroke="#3a5068" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <circle cx="8" cy="-216" r="11" fill="none" stroke="#3a5068" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <circle cx="44" cy="-212" r="6" fill="#3a1c1f" stroke="#b5474f" stroke-width="1.5"/>
+    </g></svg>`,
+  "evo-scg-head": `<svg viewBox="0 0 400 500" aria-hidden="true">
+    <defs><linearGradient id="hd" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1a2733"/><stop offset="1" stop-color="#0c131b"/></linearGradient></defs>
+    <path d="M84 160 Q72 58 176 38 Q304 24 330 128 Q346 204 298 262 L282 300 Q270 390 252 480 L132 480 Q118 390 108 300 L100 262 Q80 222 84 160 Z" fill="url(#hd)" stroke="#33465c" stroke-width="2"/>
+    <g fill="none" stroke="#3a5068" stroke-width="1.5">
+      <circle cx="140" cy="118" r="30" stroke-dasharray="4 4"/><circle cx="140" cy="118" r="9"/>
+      <circle cx="262" cy="108" r="30" stroke-dasharray="4 4"/><circle cx="262" cy="108" r="9"/>
+      <circle cx="204" cy="196" r="30" stroke-dasharray="4 4"/><circle cx="204" cy="196" r="9"/>
+      <circle cx="132" cy="228" r="18"/><circle cx="132" cy="228" r="7" fill="#16222e"/>
+      <rect x="236" y="244" width="34" height="18" rx="6"/><rect x="150" y="286" width="34" height="18" rx="6"/>
+    </g>
+    <path d="M140 84 v-8 M140 152 v8 M106 118 h-8 M174 118 h8 M262 74 v-8 M262 142 v8 M228 108 h-8 M296 108 h8 M204 162 v-8 M204 230 v8 M170 196 h-8 M238 196 h8" stroke="#26364a" stroke-width="2"/>
+    <circle cx="282" cy="196" r="13" fill="#3a1c1f" stroke="#b5474f" stroke-width="1.8"/>
+    <path d="M200 320 L200 470" stroke="#1b2632" stroke-width="2"/></svg>`,
+  "evo-base-front": `<svg viewBox="0 0 400 500" aria-hidden="true">
+    <defs><linearGradient id="bf" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1a2733"/><stop offset="1" stop-color="#0b1219"/></linearGradient></defs>
+    <rect x="182" y="120" width="36" height="120" fill="#141f2a" stroke="#33465c" stroke-width="2" stroke-dasharray="0 36 120 300"/>
+    <path d="M182 120 L218 120" stroke="#26364a" stroke-width="2" stroke-dasharray="4 4"/>
+    <path d="M30 450 L370 450 L362 468 L38 468 Z" fill="#0b1117" stroke="#33465c" stroke-width="2"/>
+    <path d="M52 450 L348 450 L318 252 Q314 238 298 238 L102 238 Q86 238 82 252 Z" fill="url(#bf)" stroke="#33465c" stroke-width="2"/>
+    <ellipse cx="200" cy="238" rx="54" ry="12" fill="#0d151d" stroke="#33465c" stroke-width="2"/>
+    <rect x="124" y="278" width="34" height="18" rx="6" fill="#111b25" stroke="#3a5068" stroke-width="1.5"/>
+    <rect x="183" y="276" width="34" height="18" rx="6" fill="#111b25" stroke="#3a5068" stroke-width="1.5"/>
+    <rect x="242" y="278" width="34" height="18" rx="6" fill="#111b25" stroke="#3a5068" stroke-width="1.5"/>
+    <path d="M94 330 L306 330 L326 434 L74 434 Z" fill="#0e161e" stroke="#26364a" stroke-width="1.5"/>
+    <rect x="185" y="344" width="30" height="78" rx="7" fill="#16222e" stroke="#3a5068" stroke-width="1.5"/>
+    <path d="M189 354 H211 M189 364 H211 M189 374 H211 M189 384 H211 M189 394 H211 M189 404 H211 M189 414 H211" stroke="#26364a" stroke-width="1.5"/>
+    <rect x="118" y="356" width="18" height="50" rx="5" fill="#16222e" stroke="#3a5068" stroke-width="1.5"/><path d="M127 381 L127 360" stroke="#5b7590" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="272" cy="382" r="20" fill="#16222e" stroke="#3a5068" stroke-width="1.5"/><circle cx="272" cy="382" r="7" fill="#26364a"/><path d="M272 362 v8" stroke="#5b7590" stroke-width="2"/></svg>`,
+  "grip-front": `<svg viewBox="0 0 400 500" aria-hidden="true">
+    <defs><linearGradient id="gf" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#16222e"/><stop offset="1" stop-color="#0c131b"/></linearGradient></defs>
+    <path d="M110 70 Q200 22 290 70 Q332 95 326 160 Q318 222 286 258 L276 300 Q268 360 258 405 L142 405 Q132 360 124 300 L114 258 Q82 222 74 160 Q68 95 110 70 Z" fill="url(#gf)" stroke="#33465c" stroke-width="2"/>
+    <path d="M138 405 L262 405 L272 440 Q200 462 128 440 Z" fill="#0d151d" stroke="#33465c" stroke-width="2"/>
+    <ellipse cx="200" cy="452" rx="96" ry="18" fill="none" stroke="#26364a" stroke-width="2"/>
+    <circle cx="150" cy="120" r="22" fill="none" stroke="#26364a" stroke-width="1.5" stroke-dasharray="3 4"/>
+    <circle cx="250" cy="120" r="22" fill="none" stroke="#26364a" stroke-width="1.5" stroke-dasharray="3 4"/>
+    <circle cx="200" cy="185" r="18" fill="none" stroke="#26364a" stroke-width="1.5" stroke-dasharray="3 4"/>
+    <path d="M200 225 L200 395" stroke="#1b2632" stroke-width="2"/></svg>`,
+  "grip-back": `<svg viewBox="0 0 400 500" aria-hidden="true">
+    <defs><linearGradient id="gb" x1="0" x2="1"><stop offset="0" stop-color="#16222e"/><stop offset="1" stop-color="#0c131b"/></linearGradient></defs>
+    <path d="M150 64 Q230 34 282 84 Q312 116 300 170 Q290 214 262 250 L254 405 L150 405 L142 300 Q120 250 116 190 Q110 104 150 64 Z" fill="url(#gb)" stroke="#33465c" stroke-width="2"/>
+    <path d="M118 196 Q72 206 66 250 Q64 280 96 288 L132 282" fill="#111b25" stroke="#33465c" stroke-width="2"/>
+    <path d="M146 405 L258 405 L266 440 Q204 460 140 440 Z" fill="#0d151d" stroke="#33465c" stroke-width="2"/>
+    <ellipse cx="204" cy="452" rx="88" ry="17" fill="none" stroke="#26364a" stroke-width="2"/>
+    <path d="M286 110 Q306 140 298 176" stroke="#26364a" stroke-width="1.5" fill="none" stroke-dasharray="3 4"/></svg>`,
+  "base": `<svg viewBox="0 0 400 500" aria-hidden="true">
+    <defs><linearGradient id="bs" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#16222e"/><stop offset="1" stop-color="#0b1219"/></linearGradient></defs>
+    <path d="M60 300 L200 250 L340 300 L340 380 L200 440 L60 380 Z" fill="url(#bs)" stroke="#33465c" stroke-width="2"/>
+    <path d="M60 300 L200 350 L340 300 M200 350 L200 440" fill="none" stroke="#26364a" stroke-width="2"/>
+    <ellipse cx="200" cy="298" rx="46" ry="16" fill="#0d151d" stroke="#33465c" stroke-width="2"/>
+    <path d="M186 296 L180 120 Q200 108 220 120 L214 296" fill="#111b25" stroke="#33465c" stroke-width="2"/>
+    <path d="M312 318 L330 210 L348 214 L334 324" fill="#111b25" stroke="#33465c" stroke-width="2"/>
+    <rect x="322" y="196" width="34" height="22" rx="5" fill="#16222e" stroke="#33465c" stroke-width="2"/>
+    <circle cx="110" cy="345" r="9" fill="none" stroke="#26364a" stroke-width="1.5"/><circle cx="140" cy="356" r="9" fill="none" stroke="#26364a" stroke-width="1.5"/></svg>`,
+};
+const curView = () => layout.views.find(v => v.id === viewId) || layout.views[0];
+const pinLabel = key => key === "hat" ? "✥" : key;
+
+function reverseMap() {
+  // physical source -> [{name, label}] of emulated outputs it drives
+  const p = prof(), rev = {};
+  for (const [kind, key] of outKeys(p)) {
+    const lkey = kind === "b" ? key : `hat:${key}`;
+    for (const s of outList(p, kind, key)) (rev[String(s)] ||= []).push({name: outName(kind, key), label: p.labels[lkey] || ""});
+  }
+  return rev;
+}
+function pinTargets(key, rev) {
+  if (key !== "hat") return (rev[key] || []).map(t => ({...t, from: null}));
+  return HATS.flatMap(([d]) => (rev[`hat:${d}`] || []).map(t => ({...t, from: ARROW[d]})));
+}
+
+function tagText(key, t) {
+  if (key !== "hat") return t.map(o => o.name).join(",");
+  // physical hat: directions that drive the same emulated direction collapse to "HAT"
+  const same = t.filter(o => o.name === `HAT ${o.from}`), other = t.filter(o => o.name !== `HAT ${o.from}`);
+  const parts = [];
+  if (same.length) parts.push(same.length === 4 ? "HAT" : "HAT" + same.map(o => o.from).join(""));
+  for (const o of other) parts.push(o.from + o.name.replace("HAT ", "H"));
+  return parts.join(",");
+}
+
+function renderMap() {
+  if (!layout || !mapping) return;
+  const v = curView(); viewId = v.id;
+  const tabs = $("#viewTabs"); tabs.textContent = "";
+  for (const vw of layout.views) { const b = el("button", vw.id === v.id ? "on" : "", vw.name); b.onclick = () => { viewId = vw.id; placing = null; renderMap(); }; tabs.append(b); }
+  $("#schemSel").value = v.schematic; $("#schemSel").hidden = !!v.image; $("#schemBtn").hidden = !v.image;
+  $("#placeBtn").classList.toggle("on", !!placing); $("#placeBtn").textContent = placing ? "Done placing" : "Place pins";
+  const cv = $("#canvas"); cv.textContent = ""; cv.classList.toggle("placing", !!placing);
+  if (v.image) { const img = el("img"); img.alt = v.name; img.src = `/api/image/${encodeURIComponent(v.image)}?t=${encodeURIComponent(TOKEN)}`; img.draggable = false; cv.append(img); }
+  else { cv.insertAdjacentHTML("beforeend", SCHEM[v.schematic] || SCHEM["evo-ot-side"]); }
+  $("#watermark").hidden = !!v.image;
+  const rev = reverseMap(), pins = layout.pins[v.id] || {};
+  refs.pins = {};
+  for (const [key, [x, y]] of Object.entries(pins)) {
+    const pin = el("div", "pin" + (key === "hat" ? " hat" : ""), pinLabel(key)); pin.dataset.key = key;
+    pin.style.left = x * 100 + "%"; pin.style.top = y * 100 + "%";
+    const t = pinTargets(key, rev);
+    pin.append(el("span", "tag" + (t.length ? "" : " none"), t.length ? "→" + tagText(key, t) : "unused"));
+    const x_ = el("button", "x", "×"); x_.title = "Remove pin"; x_.onpointerdown = e => e.stopPropagation();
+    x_.onclick = e => { e.stopPropagation(); delete layout.pins[v.id][key]; saveLayout(); renderMap(); };
+    pin.append(x_);
+    pin.onmouseenter = e => { showTip(key, e); crossHighlight(key, true); };
+    pin.onmousemove = e => moveTip(e);
+    pin.onmouseleave = () => { hideTip(); crossHighlight(key, false); };
+    pin.onpointerdown = e => startDrag(e, pin, key);
+    refs.pins[key] = pin; cv.append(pin);
+  }
+  renderClusters(cv, v, rev);
+  cv.classList.toggle("placing", !!placing || !!wizard);
+  $("#hatAddBtn").classList.toggle("on", !!wizard);
+  if (wizard) updateWizardHint(); else updatePlaceHint();
+  if (live) updateMapLive(live);
+}
+
+function updateMapLive(m) {
+  if (!refs.pins) return;
+  const pressed = new Set(m.raw.b), [hx, hy] = m.raw.h;
+  for (const [key, pin] of Object.entries(refs.pins)) pin.classList.toggle("on", key === "hat" ? (hx !== 0 || hy !== 0) : pressed.has(+key));
+  for (const [b, seg] of Object.entries(refs.segs || {})) seg.classList.toggle("on", pressed.has(+b));
+}
+
+// tooltip + cross highlighting
+function showTip(key, e) {
+  const t = pinTargets(key, reverseMap()), tip = $("#tip"); tip.textContent = "";
+  tip.append(el("b", null, key === "hat" ? "Hat" : `Button ${key}`));
+  if (!t.length) tip.append(el("div", "muted", "Not mapped to anything the game sees."));
+  for (const o of t) { const r = el("div", "row"); r.append(el("span", "t", (o.from ? o.from + " → " : "") + o.name), el("span", o.label ? "" : "muted", o.label || "no label")); tip.append(r); }
+  tip.hidden = false; moveTip(e);
+}
+function moveTip(e) { const tip = $("#tip"); tip.style.left = Math.min(e.clientX + 16, innerWidth - tip.offsetWidth - 8) + "px"; tip.style.top = Math.min(e.clientY + 16, innerHeight - tip.offsetHeight - 8) + "px"; }
+function hideTip() { $("#tip").hidden = true; }
+function crossHighlight(key, on) {
+  const p = prof();
+  for (const [kind, k] of outKeys(p)) {
+    const hit = outList(p, kind, k).some(s => key === "hat" ? String(s).startsWith("hat:") : String(s) === key);
+    const c = kind === "b" ? refs.cards[k] : refs.hatCards[k];
+    if (c) c.classList.toggle("xhl", on && hit);
+  }
+}
+function cardHighlight(kind, key, on) {
+  for (const s of outList(prof(), kind, key)) {
+    const pin = refs.pins?.[String(s).startsWith("hat:") ? "hat" : String(s)]; if (pin) pin.classList.toggle("xhl", on);
+    const seg = refs.segs?.[s]; if (seg) seg.classList.toggle("xhl", on);
+  }
+}
+
+// placement mode: press a physical control, then click its spot
+function startPlacing() {
+  if (!live) { toast("The daemon isn't running, so button presses can't be detected. Start vkb-hotas first.", true); return; }
+  if (learn) stopLearn();
+  wizard = null;
+  placing = {pending: null, base: JSON.parse(JSON.stringify(live.raw))}; renderMap();
+}
+function stopPlacing() { placing = null; renderMap(); }
+function updatePlaceHint() {
+  const h = $("#placeHint");
+  if (!placing) { h.textContent = layout && !Object.keys(layout.pins[curView().id] || {}).length ? "No pins on this view yet. Click “Place pins” and press buttons on your stick." : ""; return; }
+  h.textContent = placing.pending ? `Now click where ${placing.pending === "hat" ? "the hat" : "button " + placing.pending} is (Esc to stop).` : "Press a button or push the hat on your stick… (drag pins to adjust, × removes)";
+}
+function detectPlacing(m) {
+  let src = m.raw.b.find(b => !placing.base.b.includes(b));
+  const [x, y] = m.raw.h, [bx, by] = placing.base.h;
+  if (src == null && (x !== 0 || y !== 0) && bx === 0 && by === 0) src = "hat";
+  placing.base = JSON.parse(JSON.stringify(m.raw));
+  if (src == null) return;
+  const owner = src !== "hat" && clusterOf(src);
+  if (owner) { $("#placeHint").textContent = `Button ${src} is the ${owner.dir} of “${owner.c.name}”. Drag that hat's widget to move it.`; return; }
+  placing.pending = String(src); updatePlaceHint();
+  for (const [k, pin] of Object.entries(refs.pins || {})) pin.classList.toggle("xhl", k === placing.pending);
+}
+$("#canvas").addEventListener("click", e => {
+  if (e.target.closest(".pin, .cluster")) return;
+  const r = $("#canvas").getBoundingClientRect();
+  const xy = [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height].map(c => Math.max(0, Math.min(1, +c.toFixed(4))));
+  if (wizard && wizard.step >= CL_DIRS.length) { finishWizard(xy); return; }
+  if (!placing || !placing.pending) return;
+  const v = curView(); (layout.pins[v.id] ||= {})[placing.pending] = xy;
+  toast(`${placing.pending === "hat" ? "Hat" : "Button " + placing.pending} placed on ${v.name}`);
+  placing.pending = null; saveLayout(); renderMap();
+});
+function startDrag(e, pin, key) {
+  if (!placing) return;
+  e.preventDefault(); pin.setPointerCapture(e.pointerId); pin.style.cursor = "grabbing";
+  const r = $("#canvas").getBoundingClientRect(), v = curView();
+  const move = ev => { const x = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), y = Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height)); pin.style.left = x * 100 + "%"; pin.style.top = y * 100 + "%"; layout.pins[v.id][key] = [+x.toFixed(4), +y.toFixed(4)]; };
+  const up = () => { pin.removeEventListener("pointermove", move); pin.removeEventListener("pointerup", up); pin.style.cursor = ""; saveLayout(); };
+  pin.addEventListener("pointermove", move); pin.addEventListener("pointerup", up);
+}
+
+// views + photos
+function saveLayout(now) {
+  clearTimeout(layoutTimer);
+  const go = async () => { try { await api("PUT", "/api/layout", layout); } catch (e) { toast("Layout not saved: " + e.message, true); } };
+  if (now) return go();
+  layoutTimer = setTimeout(go, 300);
+}
+$("#placeBtn").onclick = () => placing ? stopPlacing() : startPlacing();
+$("#schemSel").onchange = e => { curView().schematic = e.target.value; saveLayout(); renderMap(); };
+$("#schemBtn").onclick = () => { curView().image = null; saveLayout(true); renderMap(); };
+$("#photoBtn").onclick = () => $("#photoFile").click();
+$("#photoFile").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try {
+    const r = await fetch(`/api/image?view=${encodeURIComponent(curView().id)}`, {method: "POST", headers: {"X-Token": TOKEN, "Content-Type": f.type || "application/octet-stream"}, body: f});
+    const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText);
+    curView().image = j.image; await saveLayout(true); renderMap();
+    toast("Photo added. Existing pins keep their relative positions; drag them to fit.");
+  } catch (err) { toast("Photo not added: " + err.message, true); }
+};
+$("#viewAdd").onclick = async () => {
+  if (layout.views.length >= 8) { toast("At most 8 views", true); return; }
+  const name = await ask("New view", "e.g. “Grip left side” or “Base front”.", ""); if (!name) return;
+  let id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20) || "view", base = id, i = 2;
+  while (layout.views.some(v => v.id === id)) id = `${base}-${i++}`;
+  layout.views.push({id, name: name.slice(0, 30), schematic: curView().schematic, image: null}); viewId = id; saveLayout(); renderMap();
+};
+$("#viewRen").onclick = async () => { const v = curView(), n = await ask("Rename view", "", v.name); if (!n) return; v.name = n.slice(0, 30); saveLayout(); renderMap(); };
+$("#viewDel").onclick = async () => {
+  if (layout.views.length < 2) { toast("You need at least one view", true); return; }
+  const v = curView(); if (!await ask("Remove view", `Remove “${v.name}” and its pins${v.image ? " and photo" : ""}?`, "", false)) return;
+  layout.views = layout.views.filter(x => x.id !== v.id); delete layout.pins[v.id]; if (layout.clusters) delete layout.clusters[v.id]; viewId = layout.views[0].id; saveLayout(true); renderMap();
+};
+document.addEventListener("keydown", e => { if (e.key === "Escape" && wizard) stopWizard(); else if (e.key === "Escape" && placing) stopPlacing(); });
+
+// ---------- multi-way hats (button clusters) ----------
+const CL_DIRS = ["up", "right", "down", "left", "center"];
+const CL_GLYPH = {up: "▲", right: "▶", down: "▼", left: "◀", center: "●"};
+const CL_WORD = {up: "UP", right: "RIGHT", down: "DOWN", left: "LEFT", center: "IN (center push)"};
+let wizard = null;
+function allClusters() { return Object.entries(layout?.clusters || {}).flatMap(([vid, list]) => list.map(c => ({...c, view: vid}))); }
+function clusterOf(n) {
+  for (const c of allClusters()) for (const [d, b] of Object.entries(c.dirs)) if (b === n) return {c, dir: d};
+  return null;
+}
+async function startWizard() {
+  if (!live) { toast("The daemon isn't running, so button presses can't be detected. Start vkb-hotas first.", true); return; }
+  if (learn) stopLearn();
+  placing = null;
+  const name = await ask("New 5-way hat", "Name it (e.g. “Thumb hat”). Then you'll push each direction and press it in.", `Hat ${allClusters().length + 1}`);
+  if (!name) { renderMap(); return; }
+  wizard = {step: 0, dirs: {}, name: name.slice(0, 24), base: JSON.parse(JSON.stringify(live.raw))};
+  renderMap(); updateWizardHint();
+}
+function stopWizard(msg) { wizard = null; if (msg) toast(msg); renderMap(); }
+function updateWizardHint() {
+  const h = $("#placeHint"); h.textContent = "";
+  if (!wizard) return;
+  const d = CL_DIRS[wizard.step];
+  h.append(d ? `${wizard.name}: push the hat ${CL_WORD[d]}…  ` : `${wizard.name}: now click where it is on the picture.`);
+  const got = Object.entries(wizard.dirs).map(([k, b]) => `${CL_GLYPH[k]}${b}`).join(" ");
+  if (got) h.append(el("span", "hint", ` [${got}]`));
+  if (d === "center") { const sk = el("button", "btn small", "No center push"); sk.onclick = () => { wizard.step++; updateWizardHint(); }; h.append(sk); }
+  const cx = el("button", "btn small", "Cancel"); cx.onclick = () => stopWizard(); h.append(cx);
+}
+function detectWizard(m) {
+  const d = CL_DIRS[wizard.step];
+  const src = m.raw.b.find(b => !wizard.base.b.includes(b));
+  wizard.base = JSON.parse(JSON.stringify(m.raw));
+  if (!d || src == null) return;
+  const owner = clusterOf(src);
+  if (owner) { toast(`Button ${src} already belongs to “${owner.c.name}”`, true); return; }
+  if (Object.values(wizard.dirs).includes(src)) { toast(`Button ${src} is already this hat's ${Object.keys(wizard.dirs).find(k => wizard.dirs[k] === src)}`, true); return; }
+  wizard.dirs[d] = src; wizard.step++; updateWizardHint();
+}
+function finishWizard(xy) {
+  if (Object.keys(wizard.dirs).length < 2) { stopWizard("A hat needs at least 2 directions"); return; }
+  const v = curView(), list = (layout.clusters ||= {})[v.id] ||= [];
+  let id = "c" + Date.now().toString(36).slice(-6);
+  list.push({id, name: wizard.name, xy, dirs: {...wizard.dirs}});
+  // a button lives either in a cluster or as its own pin, not both
+  let removed = 0;
+  for (const pins of Object.values(layout.pins)) for (const b of Object.values(wizard.dirs)) if (pins[b]) { delete pins[b]; removed++; }
+  const name = wizard.name; wizard = null; saveLayout(); renderMap();
+  toast(`${name} added` + (removed ? ` (replaced ${removed} single pin${removed > 1 ? "s" : ""})` : ""));
+}
+function renderClusters(cv, v, rev) {
+  refs.segs = {};
+  for (const c of (layout.clusters?.[v.id] || [])) {
+    const box = el("div", "cluster"); box.dataset.id = c.id;
+    box.style.left = c.xy[0] * 100 + "%"; box.style.top = c.xy[1] * 100 + "%";
+    for (const d of CL_DIRS) {
+      if (!(d in c.dirs)) continue;
+      const b = c.dirs[d], seg = el("div", `seg ${d}` + ((rev[String(b)] || []).length ? "" : " unmapped"), CL_GLYPH[d]);
+      seg.title = `${c.name} ${d}: button ${b}`; refs.segs[b] = seg; box.append(seg);
+    }
+    box.append(el("span", "name", c.name));
+    const x = el("button", "x", "×"); x.title = "Remove this hat"; x.onpointerdown = e => e.stopPropagation();
+    x.onclick = e => { e.stopPropagation(); layout.clusters[v.id] = layout.clusters[v.id].filter(k => k.id !== c.id); saveLayout(); renderMap(); };
+    box.append(x);
+    box.onmouseenter = e => { showClusterTip(c, e); for (const b of Object.values(c.dirs)) crossHighlight(String(b), true); };
+    box.onmousemove = e => moveTip(e);
+    box.onmouseleave = () => { hideTip(); for (const b of Object.values(c.dirs)) crossHighlight(String(b), false); };
+    box.onpointerdown = e => startClusterDrag(e, box, c);
+    box.ondblclick = async () => { hideTip(); const n = await ask("Rename hat", "", c.name); if (n) { c.name = n.slice(0, 24); saveLayout(); renderMap(); } };
+    box.title = "Double-click to rename";
+    cv.append(box);
+  }
+}
+function showClusterTip(c, e) {
+  const rev = reverseMap(), tip = $("#tip"); tip.textContent = "";
+  tip.append(el("b", null, c.name));
+  for (const d of CL_DIRS) {
+    if (!(d in c.dirs)) continue;
+    const t = rev[String(c.dirs[d])] || [], r = el("div", "row");
+    r.append(el("span", "t", `${CL_GLYPH[d]} BTN ${c.dirs[d]}`), el("span", t.length ? "" : "muted", t.length ? t.map(o => o.name + (o.label ? ` (${o.label})` : "")).join(", ") : "not mapped"));
+    tip.append(r);
+  }
+  tip.hidden = false; moveTip(e);
+}
+function startClusterDrag(e, box, c) {
+  if (!placing) return;
+  e.preventDefault(); box.setPointerCapture(e.pointerId);
+  const r = $("#canvas").getBoundingClientRect();
+  const move = ev => { const x = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), y = Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height)); box.style.left = x * 100 + "%"; box.style.top = y * 100 + "%"; c.xy = [+x.toFixed(4), +y.toFixed(4)]; };
+  const up = () => { box.removeEventListener("pointermove", move); box.removeEventListener("pointerup", up); saveLayout(); };
+  box.addEventListener("pointermove", move); box.addEventListener("pointerup", up);
+}
+$("#hatAddBtn").onclick = () => wizard ? stopWizard() : startWizard();
+
 // ---------- connection ----------
 function setPill(on, text) { const p = $("#pill"); p.className = "pill " + (on ? "live" : "off"); $("#pillText").textContent = text; document.body.classList.toggle("offline", !on); }
 function connect() {
@@ -524,8 +942,16 @@ function connect() {
 (async function init() {
   compass($("#physHat"), refs.physHat); compass($("#emuHat"), refs.emuHat);
   try {
-    const r = await api("GET", "/api/mapping");
-    mapping = r.mapping;
+    const [r, l] = await Promise.all([api("GET", "/api/mapping"), api("GET", "/api/layout")]);
+    mapping = r.mapping; layout = l.layout;
+    if (l.api !== 2) {  // page updated on disk but an older mapper server is still running
+      layout = null;
+      for (const sel of [".maptools", ".stage"]) document.querySelector(sel).hidden = true;
+      $("#placeHint").textContent = "Stick map unavailable: restart HOTAS Mapper (an older version is still running).";
+      toast("HOTAS Mapper was updated. Close this tab, wait a minute and reopen HOTAS Mapper (or restart it). The stick map is disabled until then so nothing gets lost.", true);
+      setTimeout(() => toast("Restart HOTAS Mapper to use the stick map.", true), 6500);
+    }
+    if (l.error) toast("Stick layout couldn't be read (" + l.error + "); showing defaults.", true);
     $("#foot").textContent = `mapping file: ${r.path}` + (r.exists ? "" : " (created on first change)");
     if (r.error) toast("Existing mapping file couldn't be read (" + r.error + "); showing defaults.", true);
     setSave(r.exists ? "loaded" : "defaults (not saved yet)");

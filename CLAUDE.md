@@ -135,10 +135,41 @@ guards, and keeps them:
 - `/api/events` is SSE relaying the daemon socket. It coalesces state lines, and reconnects when
   the daemon restarts.
 - `PUT /api/mapping` validates via `vkb_common` and writes atomically.
+- `GET|PUT /api/layout`, `POST /api/image?view=ID` (raw body), and `GET /api/image/<name>` (token in
+  the query, so `<img>` works) back the stick map.
 - The server exits 45 s after its last SSE client disconnects.
-- A single-instance URL file lives in `$XDG_RUNTIME_DIR/vkb-mapper/url`.
+- **Single-instance file:** `$XDG_RUNTIME_DIR/vkb-mapper/url-<hash of mapping path + socket>`. It's
+  keyed so test instances never hand over to the user's real mapper. A test instance once did
+  exactly that before the key existed.
+- **`API_VERSION` handshake:** the page is re-read from disk on every request, so after a reinstall
+  a still-running old server serves the new page. On a mismatch the page disables the stick map,
+  because an old server would drop fields it doesn't know when saving. Bump `API_VERSION` (and the
+  page's check) whenever the page relies on new server behaviour.
 - The page is one self-contained file (CSP forbids external resources). Physical inputs are amber
   and emulated/game outputs are cyan.
+- **Stick map:** layout and photos are owned by the mapper server alone; the daemon never reads them.
+  They live in `layout.json` + `images/` next to the mapping file (so `--mapping` relocates them for
+  tests).
+  - The layout is kept out of `mapping.json` deliberately: `normalize_mapping` drops unknown keys,
+    and the layout describes hardware, not a game profile.
+  - `normalize_layout` validates it. Pins are keyed by physical button number or `"hat"`, with
+    0..1 coordinates.
+  - `clusters` holds multi-way hats that report as separate buttons (VKB 4-way + center push).
+    Directions are learned by pressing; the user chose this over assuming numbering, which varies
+    by firmware.
+  - Clusters are visual only: the user chose to keep mapping per-button, with no "send cluster to
+    game hat" shortcut.
+  - A button belongs to a cluster or has its own pin, never both.
+  - Image names are server-generated (`IMAGE_NAME` regex). Uploads are checked by magic bytes and
+    capped at 10 MB, and saving a layout deletes images no view references.
+  - **Drawings:** the drawn schematics are inline SVGs in the page (viewBox 400×500).
+    - `evo-*` are original line drawings of the Gladiator NXT EVO Omni Throttle, made from product
+      photos: whole stick with the OTA bracket and grip tilted 38°, SCG grip head, base front.
+    - `grip-front` / `grip-back` / `base` are generic outlines for other sticks.
+    - Pins are always placed by the user, never pre-filled, because button numbering differs per
+      grip and firmware.
+  - **Defaults only apply to new layouts:** `DEFAULT_LAYOUT` is used only when no `layout.json`
+    exists. Existing layouts keep their views and drawings.
 
 **Proton side.** `proton-setup.py` sets winebus `"Enable SDL"=dword:0` in each prefix's
 `system.reg`, so Wine uses its hidraw backend for everything. That passes the T.16000M HID
