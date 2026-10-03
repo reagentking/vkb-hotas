@@ -116,9 +116,9 @@ A local page opens in your browser:
   e.g. `BTN 11 · Hat 2 ▲`.
 - **Profiles:** keep one per game. The selected profile is the one applied.
 
-Changes save to `~/.config/vkb-hotas/mapping.json`. The stick map and button names go to
-`layout.json` and `images/` beside it, shared by all profiles. and the daemon applies them
-within half a second, even mid-game. No sudo or restart is needed. Switching
+Changes save to `~/.config/vkb-hotas/mapping.json`, and the daemon applies them within half a
+second, even mid-game. No sudo or restart is needed. The stick map and button names are saved to
+`layout.json` and `images/` beside it, shared by all profiles. Switching
 between 16 and 32 buttons briefly re-creates the virtual stick, so do that with
 the game closed.
 
