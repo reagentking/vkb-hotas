@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HOTAS Mapper</title>
+<style>
+:root{
+  --bg:#06090d; --panel:#0b1118; --panel2:#0f1720; --line:#1b2632; --line2:#26364a;
+  --text:#d3e5f2; --muted:#6f879b; --dim:#3c4f61;
+  --amber:#ffb547; --amber-d:rgba(255,181,71,.14); --cyan:#46e5ff; --cyan-d:rgba(70,229,255,.13);
+  --red:#ff5d6c; --green:#5dffa8;
+  --mono:ui-monospace,"JetBrains Mono","Cascadia Mono","Fira Code",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{
+  background:
+    radial-gradient(1200px 700px at 70% -10%,rgba(70,229,255,.07),transparent 60%),
+    radial-gradient(900px 600px at 0% 110%,rgba(255,181,71,.06),transparent 60%),
+    repeating-linear-gradient(0deg,transparent 0 39px,rgba(120,170,210,.035) 39px 40px),
+    repeating-linear-gradient(90deg,transparent 0 39px,rgba(120,170,210,.035) 39px 40px),
+    var(--bg);
+  color:var(--text);font:14px/1.45 var(--sans);-webkit-font-smoothing:antialiased;
+}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+
+/* header */
+header{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:14px 24px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(13,20,28,.95),rgba(8,12,17,.85));position:sticky;top:0;z-index:20;backdrop-filter:blur(6px)}
+.brand{font:700 15px/1 var(--mono);letter-spacing:.18em;white-space:nowrap}
+.brand b{color:var(--cyan);text-shadow:0 0 12px rgba(70,229,255,.6)}
+.brand i{font-style:normal;color:var(--amber)}
+.chain{display:flex;align-items:center;gap:10px;font:12px var(--mono);color:var(--muted);flex:1;min-width:280px}
+.chain .dev{padding:5px 10px;border:1px solid var(--line2);border-radius:4px;background:var(--panel);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:330px}
+.chain .dev.phys{border-color:rgba(255,181,71,.35);color:var(--amber)}
+.chain .dev.emu{border-color:rgba(70,229,255,.35);color:var(--cyan)}
+.chain .arrow{color:var(--dim);letter-spacing:-2px}
+.chain .arrow::after{content:"━━━▶"}
+.pill{display:flex;align-items:center;gap:8px;font:600 11px var(--mono);letter-spacing:.12em;padding:6px 11px;border-radius:999px;border:1px solid var(--line2);white-space:nowrap}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.pill.live{border-color:rgba(93,255,168,.4);color:var(--green)}
+.pill.live .dot{background:var(--green);box-shadow:0 0 10px var(--green);animation:blink 2s infinite}
+.pill.off{border-color:rgba(255,93,108,.4);color:var(--red)}
+.pill.off .dot{background:var(--red)}
+@keyframes blink{50%{opacity:.35}}
+
+/* profile bar */
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 24px;border-bottom:1px solid var(--line);background:rgba(9,14,20,.7)}
+.bar label{font:600 11px var(--mono);letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+select,.input{background:var(--panel2);border:1px solid var(--line2);border-radius:4px;padding:6px 9px}
+select:hover,.input:hover{border-color:var(--dim)}
+.btn{background:var(--panel2);border:1px solid var(--line2);border-radius:4px;padding:6px 11px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text)}
+.btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.btn.danger:hover{border-color:var(--red);color:var(--red)}
+.btn.small{padding:4px 8px;font-size:10px}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:4px;overflow:hidden}
+.seg button{background:var(--panel2);border:0;padding:6px 12px;font:600 11px var(--mono);color:var(--muted)}
+.seg button.on{background:var(--cyan-d);color:var(--cyan)}
+.spacer{flex:1}
+.save{font:12px var(--mono);color:var(--muted);white-space:nowrap}
+.save.ok{color:var(--green)} .save.err{color:var(--red)}
+
+/* layout */
+main{display:grid;grid-template-columns:minmax(360px,5fr) 7fr;gap:20px;padding:20px 24px 40px;max-width:1800px;margin:0 auto}
+@media (max-width:1150px){main{grid-template-columns:1fr}}
+.panel{position:relative;background:linear-gradient(180deg,rgba(15,23,32,.92),rgba(10,15,21,.92));border:1px solid var(--line);border-radius:6px;padding:18px 18px 20px}
+.panel::before,.panel::after{content:"";position:absolute;width:14px;height:14px;border:2px solid var(--accent);opacity:.8}
+.panel::before{top:-1px;left:-1px;border-right:0;border-bottom:0;border-top-left-radius:6px}
+.panel::after{bottom:-1px;right:-1px;border-left:0;border-top:0;border-bottom-right-radius:6px}
+.panel.phys{--accent:var(--amber)} .panel.emu{--accent:var(--cyan)}
+.panel h2{margin:0 0 4px;font:700 13px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
+.panel .sub{margin:0 0 16px;color:var(--muted);font-size:12.5px}
+h3{margin:22px 0 10px;font:600 11px var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:10px}
+h3::after{content:"";flex:1;height:1px;background:var(--line)}
+
+/* axis bars */
+.axes{display:grid;gap:8px}
+.axrow{display:grid;grid-template-columns:62px 1fr 64px;align-items:center;gap:10px;font:12px var(--mono)}
+.axrow .nm{color:var(--muted)}
+.axrow .val{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.track{position:relative;height:10px;border-radius:2px;background:#0a1016;border:1px solid var(--line)}
+.track .mid{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--line2)}
+.track .fill{position:absolute;top:0;bottom:0;background:var(--c-d,var(--amber-d))}
+.track .knob{position:absolute;top:-3px;bottom:-3px;width:3px;margin-left:-1px;border-radius:1px;background:var(--c,var(--amber));box-shadow:0 0 8px var(--c,var(--amber))}
+.track .dz{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(45deg,rgba(255,255,255,.06) 0 3px,transparent 3px 6px)}
+.emu .track{--c:var(--cyan);--c-d:var(--cyan-d)}
+
+/* hat compass */
+.hatwrap{display:flex;gap:18px;align-items:center}
+.compass{display:grid;grid-template-columns:repeat(3,30px);grid-template-rows:repeat(3,30px);gap:3px}
+.compass span{display:grid;place-items:center;border-radius:3px;background:#0a1016;border:1px solid var(--line);color:var(--dim);font-size:12px}
+.compass span.c{border-radius:50%;background:transparent;border-style:dashed}
+.compass span.on{background:var(--amber-d);border-color:var(--amber);color:var(--amber);box-shadow:0 0 10px rgba(255,181,71,.35)}
+.emu .compass span.on{background:var(--cyan-d);border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 10px rgba(70,229,255,.35)}
+.hint{color:var(--muted);font-size:12.5px}
+
+/* physical buttons */
+.pbtns{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:6px}
+.pb{position:relative;height:46px;border-radius:4px;background:#0a1016;border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;font:600 13px var(--mono);color:var(--muted);transition:background .08s,border-color .08s,box-shadow .08s}
+.pb small{font:600 8.5px var(--mono);letter-spacing:.04em;color:var(--dim);margin-top:2px;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px}
+.pb.mapped small{color:var(--cyan);opacity:.75}
+.pb.on{background:var(--amber-d);border-color:var(--amber);color:var(--amber);box-shadow:0 0 14px rgba(255,181,71,.35),inset 0 0 10px rgba(255,181,71,.15)}
+
+/* emulated axes config */
+.axcfg{display:grid;gap:10px}
+.axc{display:grid;grid-template-columns:120px 150px auto 150px 1fr auto;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:5px;background:rgba(8,13,18,.6)}
+@media (max-width:1500px){.axc{grid-template-columns:110px 1fr auto 1fr;}.axc .track{grid-column:1/-2}}
+.axc .nm{font:700 13px var(--mono);color:var(--cyan)}
+.axc .nm small{display:block;font:500 11px var(--sans);color:var(--muted);letter-spacing:0}
+.toggle{display:inline-flex;align-items:center;gap:6px;font:600 10.5px var(--mono);letter-spacing:.1em;color:var(--muted);cursor:pointer;user-select:none}
+.toggle input{appearance:none;width:30px;height:16px;border-radius:999px;background:#0a1016;border:1px solid var(--line2);position:relative;margin:0;cursor:pointer}
+.toggle input::after{content:"";position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--dim);transition:.15s}
+.toggle input:checked{border-color:var(--cyan);background:var(--cyan-d)}
+.toggle input:checked::after{left:16px;background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.dzc{display:flex;align-items:center;gap:8px;font:11px var(--mono);color:var(--muted)}
+input[type=range]{accent-color:var(--cyan);width:100%}
+
+/* emulated buttons */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.card{position:relative;border:1px solid var(--line);border-radius:5px;background:rgba(8,13,18,.65);padding:10px 11px 9px;display:flex;flex-direction:column;gap:7px;transition:border-color .1s,box-shadow .1s}
+.card .top{display:flex;align-items:center;gap:8px}
+.card .id{font:700 15px var(--mono);letter-spacing:.06em;color:var(--text)}
+.card .led{width:9px;height:9px;border-radius:50%;background:#132029;border:1px solid var(--line2);margin-left:auto;transition:.08s}
+.card.on{border-color:rgba(70,229,255,.6);box-shadow:0 0 16px rgba(70,229,255,.18)}
+.card.on .led{background:var(--cyan);border-color:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+.card.on .id{color:var(--cyan)}
+.label{background:transparent;border:0;border-bottom:1px dashed var(--line2);padding:2px 0;font-size:12.5px;color:var(--text);width:100%}
+.label::placeholder{color:var(--dim)}
+.label:focus{outline:0;border-bottom-color:var(--cyan)}
+.chips{display:flex;flex-wrap:wrap;gap:5px;min-height:24px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 4px 2px 8px;border-radius:3px;border:1px solid rgba(255,181,71,.4);background:var(--amber-d);color:var(--amber);font:600 11px var(--mono);transition:.08s}
+.chip.on{background:var(--amber);color:#1b1205;box-shadow:0 0 10px rgba(255,181,71,.6)}
+.chip button{border:0;background:transparent;color:inherit;opacity:.6;padding:0 3px;font-size:12px;line-height:1}
+.chip button:hover{opacity:1}
+.none{font:11px var(--mono);color:var(--dim);letter-spacing:.08em}
+.acts{display:flex;gap:6px}
+.card.learning{border-color:var(--cyan);animation:learnpulse 1s ease-in-out infinite}
+@keyframes learnpulse{50%{box-shadow:0 0 0 3px rgba(70,229,255,.25),0 0 22px rgba(70,229,255,.35)}}
+.hatcards{flex:1;grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:1500px){.hatcards{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.axc.learning{border-color:var(--cyan);animation:learnpulse 1s ease-in-out infinite}
+
+/* learn banner */
+#learn{position:fixed;left:50%;top:76px;transform:translateX(-50%);z-index:40;display:flex;align-items:center;gap:14px;padding:12px 18px;border:1px solid var(--cyan);border-radius:6px;background:rgba(6,12,18,.96);box-shadow:0 0 30px rgba(70,229,255,.25);font:600 13px var(--mono)}
+#learn[hidden]{display:none}
+.radar{width:30px;height:30px;border-radius:50%;border:1px solid var(--cyan);position:relative;overflow:hidden;flex:none}
+.radar::after{content:"";position:absolute;inset:0;background:conic-gradient(from 0deg,rgba(70,229,255,.65),transparent 25%);animation:spin 1.1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#learn small{display:block;font:500 11.5px var(--sans);color:var(--muted)}
+
+/* modal + toasts */
+#modal{position:fixed;inset:0;background:rgba(2,5,8,.7);display:grid;place-items:center;z-index:50}
+#modal[hidden]{display:none}
+#modal .box{width:min(420px,92vw);background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:20px}
+#modal h4{margin:0 0 12px;font:700 12px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--cyan)}
+#modal p{margin:0 0 14px;color:var(--muted)}
+#modal .input{width:100%;margin-bottom:16px}
+#modal .row{display:flex;gap:8px;justify-content:flex-end}
+#toasts{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:8px;z-index:60}
+.toast{padding:10px 14px;border-radius:5px;background:var(--panel2);border:1px solid var(--line2);font:12.5px var(--sans);box-shadow:0 8px 24px rgba(0,0,0,.4);animation:in .2s ease-out}
+.toast.err{border-color:rgba(255,93,108,.5)}
+@keyframes in{from{transform:translateY(8px);opacity:0}}
+footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:center}
+.offline main{opacity:.75}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><b>HOTAS</b>·<i>MAPPER</i></div>
+  <div class="chain">
+    <span class="dev phys" id="physName" title="Physical stick">physical stick</span>
+    <span class="arrow"></span>
+    <span class="dev emu" id="emuName" title="What games see">Thrustmaster T.16000M</span>
+  </div>
+  <div class="pill off" id="pill"><span class="dot"></span><span id="pillText">CONNECTING</span></div>
+</header>
+
+<div class="bar">
+  <label for="profile">Profile</label>
+  <select id="profile" title="The selected profile is the one the daemon applies"></select>
+  <button class="btn" id="pNew">New</button>
+  <button class="btn" id="pDup">Duplicate</button>
+  <button class="btn" id="pRen">Rename</button>
+  <button class="btn danger" id="pDel">Delete</button>
+  <span style="width:14px"></span>
+  <label>Buttons</label>
+  <div class="seg" id="count"><button data-n="16">16</button><button data-n="32">32</button></div>
+  <span class="spacer"></span>
+  <span class="save" id="save">loading…</span>
+</div>
+
+<div id="learn" hidden><div class="radar"></div><div><span id="learnText"></span><small id="learnSub"></small></div><button class="btn small" id="learnCancel">Cancel (Esc)</button></div>
+
+<main>
+  <section class="panel phys">
+    <h2>Your stick</h2>
+    <p class="sub">Live input from the physical device. Lit tiles are pressed; the cyan tag shows which emulated control each button drives.</p>
+    <h3>Axes</h3>
+    <div class="axes" id="physAxes"><span class="hint">waiting for the daemon…</span></div>
+    <h3>Hat</h3>
+    <div class="hatwrap"><div class="compass" id="physHat"></div><span class="hint">Hat directions can be assigned like buttons.</span></div>
+    <h3>Buttons</h3>
+    <div class="pbtns" id="physBtns"></div>
+  </section>
+
+  <section class="panel emu">
+    <h2>What the game sees</h2>
+    <p class="sub">The emulated T.16000M. Click <b>Assign</b>, then press a button (or hat direction) on your stick. <b>Shift</b>+Assign adds a second source. <b>Test</b> presses the button in-game, which helps you find out what each one does.</p>
+    <h3>Axes</h3>
+    <div class="axcfg" id="emuAxes"></div>
+    <h3>Hat</h3>
+    <div class="hatwrap" style="align-items:flex-start">
+      <div class="compass" id="emuHat"></div>
+      <div class="cards hatcards" id="hatCards"></div>
+    </div>
+    <h3>Buttons</h3>
+    <div class="cards" id="cards"></div>
+  </section>
+</main>
+<footer id="foot"></footer>
+
+<div id="modal" hidden><div class="box"><h4 id="mTitle"></h4><p id="mText"></p><input class="input" id="mInput" maxlength="40"><div class="row"><button class="btn" id="mCancel">Cancel</button><button class="btn" id="mOk">OK</button></div></div></div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+const TOKEN = new URLSearchParams(location.search).get("t") || "";
+const $ = s => document.querySelector(s);
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const AXES = [["X","Roll"],["Y","Pitch"],["RZ","Twist / yaw"],["SLIDER","Throttle"]];
+const HATS = [["up","↑"],["down","↓"],["left","←"],["right","→"]];
+const ARROW = {up:"↑",down:"↓",left:"←",right:"→"};
+const HATVAL = [[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]];
+
+let mapping = null, hello = null, live = null, learn = null, saveTimer = null;
+const refs = {pb:[], cards:{}, hatCards:{}, physAx:{}, emuAx:{}, physHat:{}, emuHat:{}};
+
+// ---------- api ----------
+async function api(method, path, body) {
+  const r = await fetch(path, {method, headers:{"X-Token":TOKEN,"Content-Type":"application/json"}, body: body ? JSON.stringify(body) : undefined});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+function toast(msg, err) {
+  const t = el("div", "toast" + (err ? " err" : ""), msg); $("#toasts").append(t);
+  setTimeout(() => t.remove(), err ? 6000 : 2600);
+}
+function setSave(text, cls) { const s = $("#save"); s.textContent = text; s.className = "save " + (cls || ""); }
+
+const prof = () => mapping.profiles[mapping.active];
+const srcLabel = s => typeof s === "number" ? `BTN ${s}` : `HAT ${ARROW[s.slice(4)]}`;
+const outKeys = p => [...Object.keys(p.buttons).map(k => ["b", k]), ...HATS.map(([d]) => ["h", d])];
+const outList = (p, kind, key) => kind === "b" ? (p.buttons[key] ||= []) : (p.hat[key] ||= []);
+const outName = (kind, key) => kind === "b" ? `B${key}` : `HAT ${ARROW[key]}`;
+
+function scheduleSave() {
+  setSave("saving…");
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    // keep our object: UI handlers hold references into it (the server validates but doesn't change valid data)
+    try { await api("PUT", "/api/mapping", mapping); setSave(live ? "saved · applying…" : "saved (daemon offline)", live ? "" : "err"); }
+    catch (e) { setSave("not saved", "err"); toast("Save failed: " + e.message, true); }
+  }, 350);
+}
+
+// ---------- rendering ----------
+function renderProfileBar() {
+  const sel = $("#profile"); sel.textContent = "";
+  for (const name of Object.keys(mapping.profiles)) { const o = el("option", null, name); o.value = name; o.selected = name === mapping.active; sel.append(o); }
+  for (const b of $("#count").children) b.classList.toggle("on", +b.dataset.n === prof().button_count);
+}
+
+function renderEmuAxes() {
+  const box = $("#emuAxes"); box.textContent = ""; refs.emuAx = {};
+  const physAxes = hello ? hello.device.axes.map(a => a.name) : [...new Set(Object.values(prof().axes).map(a => a.src).filter(Boolean))];
+  for (const [ax, role] of AXES) {
+    const cfg = prof().axes[ax];
+    const row = el("div", "axc"); row.dataset.axis = ax;
+    const nm = el("div", "nm", ax); nm.append(el("small", null, role));
+    const sel = el("select"); sel.title = "Source axis on your stick";
+    for (const n of ["", ...physAxes]) { const o = el("option", null, n ? n.replace("ABS_", "") : "— none —"); o.value = n; o.selected = (cfg.src || "") === n; sel.append(o); }
+    if (cfg.src && !physAxes.includes(cfg.src)) { const o = el("option", null, cfg.src.replace("ABS_","") + " (missing)"); o.value = cfg.src; o.selected = true; sel.append(o); }
+    sel.onchange = () => { cfg.src = sel.value || null; scheduleSave(); };
+    const inv = el("label", "toggle"); const cb = el("input"); cb.type = "checkbox"; cb.checked = cfg.invert; inv.append(cb, "INVERT");
+    cb.onchange = () => { cfg.invert = cb.checked; scheduleSave(); };
+    const dz = el("div", "dzc"); const rng = el("input"); rng.type = "range"; rng.min = 0; rng.max = 30; rng.step = 1; rng.value = cfg.deadzone;
+    const dzv = el("span", null, `DZ ${cfg.deadzone}%`); dzv.style.minWidth = "52px";
+    rng.oninput = () => { cfg.deadzone = +rng.value; dzv.textContent = `DZ ${rng.value}%`; refs.emuAx[ax].dz.style.cssText = dzStyle(+rng.value); scheduleSave(); };
+    dz.append(dzv, rng);
+    const tr = track(); tr.dz = el("div", "dz"); tr.dz.style.cssText = dzStyle(cfg.deadzone); tr.root.prepend(tr.dz);
+    const lb = el("button", "btn small", "Learn"); lb.title = "Then move the axis you want";
+    lb.onclick = e => startLearn({type:"axis", axis:ax}, e);
+    row.append(nm, sel, inv, dz, tr.root, lb); box.append(row);
+    refs.emuAx[ax] = {...tr, row};
+  }
+}
+const dzStyle = p => `left:${50 - p/2}%;width:${p}%`;
+
+function track() {
+  const root = el("div", "track"), fill = el("div", "fill"), knob = el("div", "knob");
+  root.append(el("div", "mid"), fill, knob); return {root, fill, knob};
+}
+function setTrack(t, f) {
+  f = Math.max(0, Math.min(1, f)); const p = f * 100;
+  t.knob.style.left = p + "%";
+  t.fill.style.left = Math.min(p, 50) + "%"; t.fill.style.width = Math.abs(p - 50) + "%";
+}
+
+function compass(box, store) {
+  box.textContent = "";
+  const cells = [["","up-left"],["↑","up"],["","up-right"],["←","left"],["","c"],["→","right"],["","down-left"],["↓","down"],["","down-right"]];
+  for (const [t, k] of cells) { const s = el("span", k === "c" ? "c" : "", t); store[k] = s; box.append(s); }
+}
+
+function sourceChips(list, onRemove) {
+  const chips = el("div", "chips");
+  if (!list.length) chips.append(el("span", "none", "UNASSIGNED"));
+  list.forEach((s, i) => {
+    const c = el("span", "chip", srcLabel(s)); c.dataset.src = String(s);
+    const x = el("button", null, "×"); x.title = "Remove"; x.onclick = () => onRemove(i);
+    c.append(x); chips.append(c);
+  });
+  return chips;
+}
+
+function card(kind, key) {
+  const p = prof(), list = outList(p, kind, key), lkey = kind === "b" ? key : `hat:${key}`;
+  const c = el("div", "card"); c.dataset.kind = kind; c.dataset.key = key;
+  const top = el("div", "top"); top.append(el("span", "id", kind === "b" ? `B${String(key).padStart(2, "0")}` : `HAT ${ARROW[key]}`), el("span", "led"));
+  const lab = el("input", "label"); lab.placeholder = "what does it do in-game?"; lab.maxLength = 48; lab.value = p.labels[lkey] || "";
+  lab.oninput = () => { if (lab.value.trim()) p.labels[lkey] = lab.value; else delete p.labels[lkey]; scheduleSave(); };
+  const chips = sourceChips(list, i => { list.splice(i, 1); scheduleSave(); renderOutputs(); });
+  const acts = el("div", "acts");
+  const a = el("button", "btn small", "Assign"); a.onclick = e => startLearn({type:"out", kind, key}, e);
+  acts.append(a);
+  if (kind === "b") { const t = el("button", "btn small", "Test"); t.title = "Press this button in-game for a moment"; t.onclick = () => pulse(+key); acts.append(t); }
+  c.append(top, lab, chips, acts);
+  return c;
+}
+
+function renderOutputs() {
+  const p = prof(), box = $("#cards"); box.textContent = ""; refs.cards = {};
+  for (let n = 1; n <= p.button_count; n++) { const c = card("b", String(n)); refs.cards[n] = c; box.append(c); }
+  const hb = $("#hatCards"); hb.textContent = ""; refs.hatCards = {};
+  for (const [d] of HATS) { const c = card("h", d); refs.hatCards[d] = c; hb.append(c); }
+  renderPhysTags();
+  markLearning();
+}
+
+function renderPhys() {
+  const ax = $("#physAxes"); ax.textContent = ""; refs.physAx = {};
+  if (hello) for (const a of hello.device.axes) {
+    const row = el("div", "axrow"), t = track(), v = el("span", "val", "—");
+    row.append(el("span", "nm", a.name.replace("ABS_", "")), t.root, v); ax.append(row);
+    refs.physAx[a.name] = {...t, v, min:a.min, max:a.max};
+  }
+  const pb = $("#physBtns"); pb.textContent = ""; refs.pb = [];
+  const n = hello ? hello.device.buttons : 32;
+  for (let i = 1; i <= n; i++) { const b = el("div", "pb", String(i)); b.append(el("small")); refs.pb[i] = b; pb.append(b); }
+  renderPhysTags();
+}
+
+function renderPhysTags() {
+  if (!mapping) return;
+  const p = prof(), tags = {};
+  for (const [kind, key] of outKeys(p)) for (const s of outList(p, kind, key)) if (typeof s === "number") (tags[s] ||= []).push(outName(kind, key));
+  refs.pb.forEach((b, i) => { if (!b) return; const t = tags[i] || []; b.lastChild.textContent = t.length ? "→" + t.join(",") : ""; b.classList.toggle("mapped", t.length > 0); b.title = t.length ? `Button ${i} drives ${t.join(", ")}` : `Button ${i}: not used`; });
+}
+
+function renderAll() { renderProfileBar(); renderEmuAxes(); renderOutputs(); renderPhys(); }
+
+// ---------- live state ----------
+function onState(m) {
+  live = m;
+  const pressed = new Set(m.raw.b);
+  refs.pb.forEach((b, i) => b && b.classList.toggle("on", pressed.has(i)));
+  for (const [name, r] of Object.entries(refs.physAx)) { const v = m.raw.a[name]; if (v == null) continue; setTrack(r, (v - r.min) / ((r.max - r.min) || 1)); r.v.textContent = v; }
+  const [hx, hy] = m.raw.h;
+  for (const [k, s] of Object.entries(refs.physHat)) s.classList.toggle("on", hatOn(k, hx, hy));
+  const [ox, oy] = m.out.h < 8 ? HATVAL[m.out.h] : [0, 0];
+  for (const [k, s] of Object.entries(refs.emuHat)) s.classList.toggle("on", hatOn(k, ox, oy));
+  for (const [n, c] of Object.entries(refs.cards)) c.classList.toggle("on", !!(m.out.b & (1 << (n - 1))));
+  for (const [d, c] of Object.entries(refs.hatCards)) c.classList.toggle("on", hatOn(d, ox, oy));
+  if (hello) for (const [ax, r] of Object.entries(refs.emuAx)) setTrack(r, m.out.a[ax] / (hello.emulated.axes[ax] || 1));
+  document.querySelectorAll(".chip").forEach(c => { const s = c.dataset.src; c.classList.toggle("on", /^\d+$/.test(s) ? pressed.has(+s) : hatOn(s.slice(4), hx, hy)); });
+  if (learn) detectLearn(m);
+}
+function hatOn(k, x, y) {
+  if (k === "c") return x === 0 && y === 0 && false;
+  const want = {up:[0,-1],down:[0,1],left:[-1,0],right:[1,0],"up-left":[-1,-1],"up-right":[1,-1],"down-left":[-1,1],"down-right":[1,1]}[k];
+  if (!want) return false;
+  if (k.includes("-")) return x === want[0] && y === want[1];
+  return (want[0] && x === want[0]) || (want[1] && y === want[1]);
+}
+
+// ---------- learn mode ----------
+function startLearn(target, ev) {
+  if (!live) { toast("The daemon isn't running, so live input isn't available. Start vkb-hotas first.", true); return; }
+  learn = {...target, add: !!(ev && ev.shiftKey), base: JSON.parse(JSON.stringify(live.raw))};
+  const what = target.type === "axis" ? `the axis for ${target.axis}` : `a button or hat direction for ${outName(target.kind, target.key)}`;
+  $("#learnText").textContent = target.type === "axis" ? `Move ${what}` : `Press ${what}`;
+  $("#learnSub").textContent = target.type === "axis" ? "Push it well past a quarter of its travel." : (learn.add ? "Adding as an extra source (Shift)." : "Replaces this slot's sources and moves the button off any other slot.");
+  $("#learn").hidden = false; markLearning();
+}
+function stopLearn() { learn = null; $("#learn").hidden = true; markLearning(); }
+function markLearning() {
+  document.querySelectorAll(".learning").forEach(e => e.classList.remove("learning"));
+  if (!learn) return;
+  if (learn.type === "axis") refs.emuAx[learn.axis]?.row.classList.add("learning");
+  else (learn.kind === "b" ? refs.cards[learn.key] : refs.hatCards[learn.key])?.classList.add("learning");
+}
+function detectLearn(m) {
+  if (learn.type === "axis") {
+    let best = null, bestD = 0.25;
+    for (const a of hello.device.axes) {
+      const d = Math.abs((m.raw.a[a.name] - learn.base.a[a.name]) / ((a.max - a.min) || 1));
+      if (d > bestD) { best = a.name; bestD = d; }
+    }
+    if (best) { prof().axes[learn.axis].src = best; toast(`${learn.axis} ← ${best.replace("ABS_", "")}`); stopLearn(); scheduleSave(); renderEmuAxes(); }
+    return;
+  }
+  let src = m.raw.b.find(b => !learn.base.b.includes(b));
+  if (src == null) {
+    const [x, y] = m.raw.h, [bx, by] = learn.base.h;
+    if (y < 0 && by >= 0) src = "hat:up"; else if (y > 0 && by <= 0) src = "hat:down";
+    else if (x < 0 && bx >= 0) src = "hat:left"; else if (x > 0 && bx <= 0) src = "hat:right";
+  }
+  if (src == null) { learn.base = JSON.parse(JSON.stringify(m.raw)); return; }  // track releases
+  assign(learn.kind, learn.key, src, learn.add); stopLearn();
+}
+function assign(kind, key, src, add) {
+  const p = prof(), moved = [];
+  for (const [k2, key2] of outKeys(p)) {
+    if (k2 === kind && key2 === key) continue;
+    const l = outList(p, k2, key2), i = l.indexOf(src);
+    if (i >= 0) { l.splice(i, 1); moved.push(outName(k2, key2)); }
+  }
+  const list = outList(p, kind, key);
+  if (add) { if (!list.includes(src)) list.push(src); } else list.splice(0, list.length, src);
+  toast(`${srcLabel(src)} → ${outName(kind, key)}` + (moved.length ? ` (moved off ${moved.join(", ")})` : ""));
+  scheduleSave(); renderOutputs();
+}
+async function pulse(n) {
+  try { await api("POST", "/api/pulse", {button:n}); }
+  catch (e) { toast(e.message, true); }
+}
+
+// ---------- profiles ----------
+function ask(title, text, value, withInput = true) {
+  return new Promise(res => {
+    $("#mTitle").textContent = title; $("#mText").textContent = text;
+    const inp = $("#mInput"); inp.hidden = !withInput; inp.value = value || "";
+    $("#modal").hidden = false; if (withInput) { inp.focus(); inp.select(); } else $("#mOk").focus();
+    const done = v => { $("#modal").hidden = true; $("#mOk").onclick = $("#mCancel").onclick = inp.onkeydown = null; res(v); };
+    $("#mOk").onclick = () => done(withInput ? inp.value.trim() : true);
+    $("#mCancel").onclick = () => done(null);
+    inp.onkeydown = e => { if (e.key === "Enter") done(inp.value.trim()); if (e.key === "Escape") done(null); };
+  });
+}
+function freshProfile(count) {
+  const p = {button_count: count, axes: {}, buttons: {}, hat: {}, labels: {}};
+  for (const [ax] of AXES) p.axes[ax] = {src: {X:"ABS_X",Y:"ABS_Y",RZ:"ABS_RZ",SLIDER:"ABS_Z"}[ax], invert:false, deadzone:0};
+  for (let i = 1; i <= count; i++) p.buttons[i] = [i];
+  for (const [d] of HATS) p.hat[d] = [`hat:${d}`];
+  return p;
+}
+function validName(n) {
+  if (!n) return false;
+  if (n.length > 40) { toast("Names can be up to 40 characters", true); return false; }
+  if (mapping.profiles[n]) { toast(`A profile called "${n}" already exists`, true); return false; }
+  return true;
+}
+$("#profile").onchange = e => { mapping.active = e.target.value; stopLearn(); renderAll(); scheduleSave(); toast(`Profile "${mapping.active}" is now active`); };
+$("#pNew").onclick = async () => { const n = await ask("New profile", "Starts from the default 1:1 mapping.", ""); if (!validName(n)) return; mapping.profiles[n] = freshProfile(prof().button_count); mapping.active = n; renderAll(); scheduleSave(); };
+$("#pDup").onclick = async () => { const n = await ask("Duplicate profile", `Copy of "${mapping.active}".`, mapping.active + " copy"); if (!validName(n)) return; mapping.profiles[n] = JSON.parse(JSON.stringify(prof())); mapping.active = n; renderAll(); scheduleSave(); };
+$("#pRen").onclick = async () => {
+  const old = mapping.active, n = await ask("Rename profile", "", old); if (!n || n === old || !validName(n)) return;
+  const ps = {}; for (const [k, v] of Object.entries(mapping.profiles)) ps[k === old ? n : k] = v;
+  mapping.profiles = ps; mapping.active = n; renderAll(); scheduleSave();
+};
+$("#pDel").onclick = async () => {
+  if (Object.keys(mapping.profiles).length < 2) { toast("You need at least one profile", true); return; }
+  if (!await ask("Delete profile", `Delete "${mapping.active}"? This can't be undone.`, "", false)) return;
+  delete mapping.profiles[mapping.active]; mapping.active = Object.keys(mapping.profiles)[0]; renderAll(); scheduleSave();
+};
+$("#count").onclick = e => {
+  const n = +e.target.dataset.n, p = prof(); if (!n || n === p.button_count) return;
+  if (n === 16) { for (const k of Object.keys(p.buttons)) if (+k > 16) delete p.buttons[k]; for (const k of Object.keys(p.labels)) if (/^\d+$/.test(k) && +k > 16) delete p.labels[k]; }
+  else { const used = new Set(Object.values(p.buttons).flat()); for (let i = 17; i <= 32; i++) p.buttons[i] = used.has(i) ? [] : [i]; }
+  p.button_count = n; renderAll(); scheduleSave();
+  toast(n === 32 ? "32 buttons: games see a T.16000M with extra buttons" : "16 buttons: identical to a real T.16000M");
+};
+$("#learnCancel").onclick = stopLearn;
+document.addEventListener("keydown", e => { if (e.key === "Escape" && learn) stopLearn(); });
+
+// ---------- connection ----------
+function setPill(on, text) { const p = $("#pill"); p.className = "pill " + (on ? "live" : "off"); $("#pillText").textContent = text; document.body.classList.toggle("offline", !on); }
+function connect() {
+  const es = new EventSource("/api/events?t=" + encodeURIComponent(TOKEN));
+  es.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.t === "state") onState(m);
+    else if (m.t === "hello") {
+      const first = !hello || hello.device.buttons !== m.device.buttons; hello = m;
+      $("#physName").textContent = `${m.device.name}  ${m.device.id}`; $("#emuName").textContent = `${m.emulated.name}  ${m.emulated.id}`;
+      setPill(true, "LIVE · " + m.profile.toUpperCase());
+      if (m.error) setSave("daemon rejected file: " + m.error, "err");
+      if (first || !Object.keys(refs.physAx).length) { renderPhys(); renderEmuAxes(); }
+    } else if (m.t === "mapping") {
+      if (m.ok) { setSave(`saved · applied “${m.profile}”`, "ok"); setPill(true, "LIVE · " + m.profile.toUpperCase()); }
+      else { setSave("daemon rejected file: " + m.error, "err"); }
+    } else if (m.t === "offline") {
+      live = null; setPill(false, m.reason === "PermissionError" ? "NO ACCESS TO DAEMON" : "DAEMON OFFLINE");
+    }
+  };
+  es.onerror = () => setPill(false, "MAPPER STOPPED");
+}
+
+(async function init() {
+  compass($("#physHat"), refs.physHat); compass($("#emuHat"), refs.emuHat);
+  try {
+    const r = await api("GET", "/api/mapping");
+    mapping = r.mapping;
+    $("#foot").textContent = `mapping file: ${r.path}` + (r.exists ? "" : " (created on first change)");
+    if (r.error) toast("Existing mapping file couldn't be read (" + r.error + "); showing defaults.", true);
+    setSave(r.exists ? "loaded" : "defaults (not saved yet)");
+    renderAll(); connect();
+  } catch (e) { setSave("can't reach mapper: " + e.message, "err"); }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+[Unit]
+Description=Flight stick -> virtual Thrustmaster T.16000M for Proton games (vkb-hotas)
+Documentation=file:///usr/local/lib/vkb-hotas/README.md
+# Give up instead of looping forever on a bad config (see: journalctl -u vkb-hotas)
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/vkb-hotas
+ExecStart=/usr/local/lib/vkb-hotas/vkb-hotas.py --wait 5 $VKB_HOTAS_ARGS
+Restart=on-failure
+RestartSec=2

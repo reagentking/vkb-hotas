@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=HOTAS Mapper
+GenericName=Joystick button remapper
+Comment=Remap your flight stick's buttons and axes for vkb-hotas
+Exec=vkb-mapper
+Icon=input-gaming
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=joystick;hotas;vkb;remap;flight stick;
