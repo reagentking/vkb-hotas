@@ -191,3 +191,7 @@ real stick ──evdev (grabbed)──▶ vkb-hotas.py ──/dev/uhid──▶ 
 | `vkb-mapper.py`, `vkb-mapper.html`, `vkb-mapper.desktop` | HOTAS Mapper GUI (local web UI, standard library only) |
 | `vkb-check.py`, `vkb-learn.py` | diagnostics: setup and Proton-log analysis; axis discovery |
 | `dev/fake-daemon.py` | development: the daemon's mapping/socket logic with a simulated stick, for working on the GUI without root |
+
+## License
+
+MIT, see [LICENSE](LICENSE).
