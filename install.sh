@@ -103,7 +103,7 @@ cat <<MSG
 Installed for $device. The service starts automatically whenever the stick is
 plugged in.
   1. Restart Steam so it lets go of the real stick.
-  2. As your user, configure game prefixes:  ./proton-setup.py
+  2. As your user, configure game prefixes:  ./tools/proton-setup.py
   3. Remap buttons/axes:  vkb-mapper   (or "HOTAS Mapper" in your app menu)
 Toggle the remap:  sudo systemctl stop|start vkb-hotas
 MSG

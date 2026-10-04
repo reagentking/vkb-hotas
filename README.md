@@ -27,6 +27,7 @@ Unplug the stick, or stop the service, and everything returns to normal.
 | VKB Gladiator NXT EVO Omni Throttle (R), `231d:3200` | axes, hat, 32 buttons verified through the virtual stick |
 | Star Wars: Squadrons (Proton Experimental) | game acquires and polls the stick |
 | Ace Combat 8 (Proton Hotfix) | game acquires and polls the stick; shows controller button icons; flight not yet confirmed |
+| Project Wingman (Proton Experimental) | game opens the stick and receives input; bind controls in the game's binding menu (click a binding, then move the axis or press the button) |
 
 Other VKB models should work after adjusting axes in HOTAS Mapper (or with `--axis`, see [Mapping](#mapping)).
 Reports from other sticks and games are welcome.
@@ -48,8 +49,11 @@ sudo ./install.sh --device 231d:3200   # or pick one explicitly (any vendor work
 ./tools/proton-setup.py             # as your user, games closed
 ```
 
-`proton-setup.py` configures Squadrons and Ace Combat 8 by default. Pass app ids
-for other games (`./tools/proton-setup.py --list` shows them). It sets the winebus
+`proton-setup.py` configures Squadrons and Ace Combat 8 by default. **Every other
+Proton game needs it once too**: pass its app id, e.g. `./tools/proton-setup.py 895870`
+for Project Wingman (`./tools/proton-setup.py --list` shows them). Without it, Wine
+can present the stick as a gamepad, and a game may then ignore it (Project Wingman
+saw no input until its prefix was set up). It sets the winebus
 `Enable SDL`=0 in each prefix, so Wine passes the virtual stick through its
 hidraw backend, and clears stale DirectInput cache entries. Backups are written
 next to each edited `.reg` file.

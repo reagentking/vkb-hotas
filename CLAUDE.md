@@ -19,6 +19,8 @@ rebinding for this stick.
 **Current status:** in Squadrons the game acquires and polls the stick. AC8 acquires and polls it,
 but shows controller button icons, and in-flight behaviour hasn't been confirmed yet. If AC8
 treats the T.16000M badly, the planned fallback is emulating a Logitech X56 instead.
+Project Wingman (appid 895870) opens the stick and receives input once its prefix is set up with
+`proton-setup.py 895870`; controls are bound in the game's own menu.
 
 ## Repository layout
 
@@ -273,6 +275,12 @@ cached `DirectInput\VID_…` entries from `user.reg`.
   an existing fd. After install, Steam must be restarted.
 - **One source stick per install.** If the user owns a real T.16000M too, games see two identical
   devices; `vkb-check.py` warns about this.
+- **Every Proton game needs `proton-setup.py <appid>`.** The service is game-agnostic, but a prefix
+  left on Wine's SDL backend can expose the stick as a gamepad. Project Wingman reads joysticks
+  through its bundled `SDL2.dll` and the UE4 JoystickPlugin, which has `IgnoreGameControllers`;
+  the user saw no stick input before its prefix was configured, and input arrived after (no log
+  exists from before, so the gamepad path is the likely cause, not a proven one). When a new game "sees nothing",
+  check the prefix's winebus `Enable SDL` value first (`vkb-check.py` prints it), then the log.
 - **AC8 controller icons:** AC8 shows controller button icons even when DirectInput is working.
   That alone isn't a failure.
 - **Layout/format changes ripple into the user's data.**

@@ -165,7 +165,7 @@ def main():
 
     if not args.undo:
         print(f"\nSteam launch options for each game (Properties > General), Steam Input off:\n  {LAUNCH}")
-        print(f"For a diagnosable run (then check with ./vkb-check.py):\n  {LAUNCH_DEBUG}")
+        print(f"For a diagnosable run (then check with ./tools/vkb-check.py):\n  {LAUNCH_DEBUG}")
 
 
 if __name__ == "__main__":

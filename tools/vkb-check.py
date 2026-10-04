@@ -196,7 +196,7 @@ def analyse(path, match):
         elif fn in ("dinput_device_GetDeviceState", "dinput_device_GetDeviceData", "dinput_device_Poll"):
             reads[iface] = reads.get(iface, 0) + 1
 
-    print(f"{INFO}winebus SDL backend: {'disabled (hidraw path)' if sdl_off else 'ENABLED (run ./proton-setup.py)'}")
+    print(f"{INFO}winebus SDL backend: {'disabled (hidraw path)' if sdl_off else 'ENABLED (run ./tools/proton-setup.py)'}")
     if devs:
         emu = devs.get(EMULATED)
         if emu is None:

@@ -11,4 +11,4 @@ systemctl daemon-reload
 udevadm control --reload
 udevadm trigger --action=change --subsystem-match=input --subsystem-match=hidraw
 echo "Removed. Kept: /etc/default/vkb-hotas and ~/.config/vkb-hotas/ (your mappings); delete by hand if you like."
-echo "Proton prefixes: ./proton-setup.py --undo (as your user) restores the SDL backend."
+echo "Proton prefixes: ./tools/proton-setup.py --undo (as your user) restores the SDL backend."
