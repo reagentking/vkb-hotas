@@ -16,6 +16,10 @@ where it fails, mid-install, on their system. Check it first in a sandbox.
 .claude/skills/test-installer/scripts/sandbox_install.sh --keep ... # keep the sandbox for inspection
 ```
 
+**Run it outside Claude Code's Bash sandbox** (`dangerouslyDisableSandbox: true`). The sandbox
+hides `/dev`, so `install.sh` stops at its `/dev/uhid missing` check and the run fails with
+nothing wrong in the repo. The script itself writes only to a temp dir and the repo.
+
 What the script does:
 - Copies `install.sh` and `uninstall.sh` with `/usr/local`, `/etc/` and `/run/vkb-hotas` rewritten
   into a temp root, and the root check disabled. The copies stay in the repo directory (deleted
@@ -38,6 +42,7 @@ It then checks:
 
 ## When it fails
 
+- `error: /dev/uhid missing` straight away: you ran it inside the Bash sandbox. Re-run it outside.
 - `cannot stat .../<file>` during install: `install.sh` points at a path that moved. Update its
   `$here/...` source paths.
 - `MISMATCH`: the installer copies a different file than the repo source, or the source changed
