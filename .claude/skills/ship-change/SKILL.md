@@ -54,7 +54,12 @@ hides a failing exit code.
 
 ## 4. Commit
 
-- Stage deliberately (`git add -A` is fine when `git status` shows only intended files).
+- Stage deliberately: name the files (`git add README.md tools/proton-setup.py ...`). Inside
+  Claude Code's Bash sandbox, `git status` also lists placeholders such as `.claude/settings.json`,
+  `.claude/hooks` and `.mcp.json`. They are `/dev/null` character devices the sandbox mounts over
+  protected paths, and they don't exist on disk. Run `git status` outside the sandbox
+  (`dangerouslyDisableSandbox: true`) to see the real changes. Use `git add -A` only there, and only
+  when that status shows just the intended files.
 - Write a subject line that says what users get, and a body with bullet points grouped by area
   (feature, server, docs).
 - End the message with the attribution lines the session tells you to use (the system reminder's

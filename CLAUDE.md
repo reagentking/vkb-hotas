@@ -61,8 +61,9 @@ sudo ./uninstall.sh
 tools/vkb-check.py            # or: tools/vkb-check.py ~/steam-<appid>.log
 journalctl -u vkb-hotas -b
 
-# Proton prefix setup (as user, games closed). Default app ids: 1222730 (Squadrons), 2288340 (AC8)
-tools/proton-setup.py [APPID...] | --list | --undo
+# Proton prefix setup (as user, games closed). No ids on a terminal: curses checklist of all
+# prefixes (checked = set up; unchecking restores). No ids without a terminal: 1222730, 2288340
+tools/proton-setup.py [APPID...] | --list | --undo [APPID...]
 ```
 
 A game launch that produces an analysable log uses these launch options:
@@ -244,7 +245,12 @@ guards, and keeps them:
 **Proton side.** `tools/proton-setup.py` sets winebus `"Enable SDL"=dword:0` in each prefix's
 `system.reg`, so Wine uses its hidraw backend for everything. That passes the T.16000M HID
 descriptor through untouched, and ignores SDL gamepad mappings that Steam injects. It also drops
-cached `DirectInput\VID_…` entries from `user.reg`.
+cached `DirectInput\VID_…` entries from `user.reg`. "Set up" status = that value present
+(`is_configured`). The checklist is desired-state, by the user's choice: it starts with set-up games
+checked, then applies the difference after a confirmation. It falls back to a numbered list when the
+terminal lacks cursor addressing (`tigetstr("cup")`): under `TERM=dumb` curses still starts, and
+typed numbers were read as checklist keys. The user chose prefix-only: launch options are printed,
+never written into Steam's `localconfig.vdf`.
 
 ## Gotchas (all hit during development)
 
@@ -269,6 +275,10 @@ cached `DirectInput\VID_…` entries from `user.reg`.
 - **Backgrounding from bash scripts:** `( cd dir && cmd & )` inside a script left `cmd` as a
   foreground child, and callers piping the script's output hung. Use
   `(cd dir && exec setsid -f cmd < /dev/null > log 2>&1)`.
+- **Claude Code's Bash sandbox** hides `/dev` (so `install.sh`, and the `test-installer` sandbox,
+  fail at the `/dev/uhid` check), blocks `git push` unless `github.com` is in `allowed_domains`, and
+  makes `git status` list fake `/dev/null` placeholders (`.claude/settings.json`, `.mcp.json`, …).
+  Check `git status` outside the sandbox and stage files by name.
 - **`rm -rf` on a computed path** (e.g. `$(mktemp -d)`) is blocked by a safety check in Claude Code.
   Use literal scratch paths for anything you need to delete afterwards.
 - **Steam holds the device open.** Steam opens the real stick at startup, and hiding doesn't revoke

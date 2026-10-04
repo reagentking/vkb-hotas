@@ -46,14 +46,22 @@ Reports from other sticks and games are welcome.
 sudo ./install.sh --list            # show connected sticks
 sudo ./install.sh                   # autodetects if exactly one VKB device is plugged in
 sudo ./install.sh --device 231d:3200   # or pick one explicitly (any vendor works)
-./tools/proton-setup.py             # as your user, games closed
+./tools/proton-setup.py             # as your user, games closed: pick games from a checklist
 ```
 
-`proton-setup.py` configures Squadrons and Ace Combat 8 by default. **Every other
-Proton game needs it once too**: pass its app id, e.g. `./tools/proton-setup.py 895870`
-for Project Wingman (`./tools/proton-setup.py --list` shows them). Without it, Wine
-can present the stick as a gamepad, and a game may then ignore it (Project Wingman
-saw no input until its prefix was set up). It sets the winebus
+**Every Proton game you fly with the stick needs this once.** Run with no
+arguments, `proton-setup.py` shows a checklist of your installed Proton games,
+each marked *set up* or *not set up*. Use the arrow keys, Space to check or
+uncheck, `a` for all/none, Enter to apply (it confirms first), and `q` to cancel.
+Games already set up start checked; unchecking one restores Wine's default for
+it. On a terminal without cursor control you get a numbered list instead.
+
+You can also pass app ids directly, e.g. `./tools/proton-setup.py 895870` for
+Project Wingman; `--list` shows ids and status. Without a terminal and with no
+ids, it configures Squadrons and Ace Combat 8.
+
+Without this setup, Wine can present the stick as a gamepad, and a game may then
+ignore it (Project Wingman saw no input until its prefix was set up). It sets the winebus
 `Enable SDL`=0 in each prefix, so Wine passes the virtual stick through its
 hidraw backend, and clears stale DirectInput cache entries. Backups are written
 next to each edited `.reg` file.
@@ -195,7 +203,7 @@ throttle), plus button numbers above 16.
 
 ```bash
 sudo ./uninstall.sh
-./tools/proton-setup.py --undo      # restore Wine's default input backend in the prefixes
+./tools/proton-setup.py --undo      # checklist of set-up games to restore to Wine's default backend
 ```
 
 ## Limitations
