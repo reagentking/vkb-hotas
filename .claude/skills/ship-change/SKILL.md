@@ -47,8 +47,10 @@ think, not an error.
 
 If the diff touches `install.sh`, `uninstall.sh`, anything under `service/`, or moves or renames
 files, also run the `test-installer` sandbox
-(`.claude/skills/test-installer/scripts/sandbox_install.sh`). The user's next `sudo ./install.sh`
-is otherwise the first real test.
+(`.claude/skills/test-installer/scripts/sandbox_install.sh`), outside Claude Code's Bash sandbox
+(see that skill). The user's next `sudo ./install.sh` is otherwise the first real test. Run it
+on its own, not chained with `&& git commit`: its output is usually piped through `tail`, which
+hides a failing exit code.
 
 ## 4. Commit
 
@@ -62,6 +64,10 @@ is otherwise the first real test.
 ## 5. Push
 
 `git push` (origin is SSH: `git@github.com:reagentking/vkb-hotas.git`).
+- **Allow GitHub through the network sandbox:** run the push with `allowed_domains`
+  `["github.com:22", "github.com"]`. Without it, the sandbox refuses the SSH connection and git
+  reports "Please make sure you have the correct access rights", which looks like an auth problem
+  but isn't. The `<sandbox_violations>` block names the denied host.
 - **If SSH fails with "Host key verification failed",** the environment lacks GitHub's host key.
   Don't add it yourself; push once over HTTPS with the GitHub CLI's credentials instead:
   `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push https://github.com/reagentking/vkb-hotas.git main`.
