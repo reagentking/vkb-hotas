@@ -5,8 +5,9 @@ description: Test HOTAS Mapper (mapper/vkb-mapper.py and mapper/vkb-mapper.html)
 
 # Test HOTAS Mapper against a simulated stick
 
-`dev/fake-daemon.py` runs the daemon's real `Mapper`, `ControlServer` and `MappingWatcher`
-classes with a simulated Gladiator. It has no uhid, grab or udev, so it needs no root.
+`dev/fake-daemon.py` runs the daemon's real `Daemon` event loop with two simulated Omni Throttles
+(stick 0 = right `231d:3200`, stick 1 = left `231d:3201`). It has no uhid, grab or udev, so it needs
+no root; device selection and exposing persist to the test dir's `config`.
 `scripts/test_stack.sh` pairs it with a mapper instance that has its own socket, mapping file and
 port, so tests can't touch `~/.config/vkb-hotas` or the user's running mapper.
 
@@ -14,11 +15,17 @@ port, so tests can't touch `~/.config/vkb-hotas` or the user's running mapper.
 
 ```bash
 S=.claude/skills/test-mapper-ui/scripts/test_stack.sh
-$S start [--button-count 32] [--layout ~/.config/vkb-hotas/layout.json] [--sweep]   # prints the URL
-$S press 17          # simulated physical press (held 0.6 s); also hat:up|down|left|right
+$S start [--button-count 32] [--layout ~/.config/vkb-hotas/layout.json] [--sweep] [--throttle 231d:3201] [--twin]
+$S press 17          # simulated press (held 0.6 s) on the stick role's stick; also hat:up|down|left|right
+$S press 17 1        # ... on simulated stick 1 (the left one): cross-mapping, throttle role
+$S unplug 1 / plug 1 # unplug / replug a simulated stick
 $S url               # reprint the URL
 $S stop              # always, when done
+VKB_HOTAS_CTL=$XDG_RUNTIME_DIR/vkb-hotas-dev/ctl.sock mapper/vkb-mapper.py --expose throttle   # CLI against the fake
 ```
+
+- **Run these outside Claude Code's Bash sandbox** (`dangerouslyDisableSandbox: true`): it blocks
+  unix sockets and `$XDG_RUNTIME_DIR`.
 
 - **`--layout`** copies a file into the test dir. Use a copy of the user's real layout to test
   format migrations on realistic data; the original is never touched.
@@ -46,8 +53,11 @@ $S stop              # always, when done
 
 The page's globals are reachable from `javascript_tool`. That's faster and more reliable than
 clicking for setup:
-- **State:** `layout`, `mapping`, `prof()`, `curView()`, `picKey(v)`, `curPins()`.
-- **Actions:** `assign(kind, key, src, add)`, `renderMap()`, `saveLayout(true)`.
+- **State:** `role` (current tab), `mapping`, `prof()` (that role's section), `profR(r)`,
+  `layoutAll` / `layout` (that role's section), `hello`, `live`, `curView()`, `picKey(v)`,
+  `curPins()`, `readOnly`.
+- **Actions:** `setRole(r)`, `assign(kind, key, src, add)` (src may be `"throttle:7"`),
+  `renderMap()`, `saveLayout(true)`, `renderDevices()`.
 - **Dialogs:** answer them by setting `#mInput` and clicking `#mOk` or `#mCancel`.
 - **Placement and drags:** use a real mouse click at least once, to prove the coordinate math.
   Synthetic `MouseEvent('click', {clientX, clientY})` on `#canvas` is fine after that.
@@ -62,8 +72,12 @@ example, press a button and check `out.b` has the mapped bit set, or send
 
 ## What to cover (pick what your change touches)
 
-- **Mapping:** Assign (and Shift+Assign) moves a source off other slots; labels persist; Test
-  pulses light the output.
+- **Roles and devices:** both tabs render; Devices selects, swaps and clears the throttle (check
+  `DIR/config`); unplug/replug updates the tab and banner; `--expose` shows the EXPOSED badge and
+  banner; switching tabs repaints live values.
+- **Mapping:** Assign (and Shift+Assign) moves a source off other slots *on both devices*; a press
+  on the other stick saves a prefixed source (`throttle:7`) and shows a `THR`/`STK` chip tag;
+  cross axes in the dropdown; labels persist; Test pulses light the right device's output.
 - **Stick map:**
   - pins land where clicked (also when zoomed);
   - each picture shows only its own pins;
@@ -75,8 +89,9 @@ example, press a button and check `out.b` has the mapped bit set, or send
   show on chips.
 - **Robustness:**
   - reload persistence;
-  - a version mismatch shows the restart message (start a mapper from before the
-    `API_VERSION` bump);
+  - a version mismatch makes the page read-only with the restart message: copy an older
+    `mapper/vkb-mapper.py` (`git show <rev>:...`) plus its `vkb_common.py` into a temp dir with
+    the *new* page, start it on 8765, and confirm `mapping.json` is untouched after edits;
   - an old-format layout converts on load;
   - the server rejects bad input (curl the API with the token).
 

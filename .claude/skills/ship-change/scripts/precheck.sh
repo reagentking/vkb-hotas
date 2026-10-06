@@ -17,8 +17,8 @@ for f in *.sh .claude/skills/*/scripts/*.sh; do
     [[ -e $f ]] || continue
     bash -n "$f" || { echo "  FAIL $f"; fail=1; }
 done
-t=$(mktemp --suffix=.rules); sed -e s/@VID@/231d/g -e s/@PID@/3200/g service/72-vkb-hotas.rules.in > "$t"
-udevadm verify "$t" >/dev/null 2>&1 || { echo "  FAIL udev rule template"; fail=1; }; rm -f "$t"
+t=$(mktemp --suffix=.rules); cp service/72-vkb-hotas.rules "$t"   # verify wants a real *.rules file
+udevadm verify "$t" >/dev/null 2>&1 || { echo "  FAIL udev rule"; fail=1; }; rm -f "$t"
 (( fail )) || echo "  ok"
 
 echo "== privacy (tracked + new untracked files)"

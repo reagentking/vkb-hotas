@@ -1,0 +1,17 @@
+# vkb-hotas: real flight sticks -> virtual Thrustmaster devices for Proton games.
+# Installed by install.sh. Must sort after 70-uaccess.rules / any vendor rule
+# granting uaccess, and before 73-seat-late.rules (which applies the ACLs).
+#
+# Hiding the real sticks is not done here: while it runs, the daemon writes
+# /run/udev/rules.d/72-vkb-hotas-hide.rules for exactly the sticks it replaces,
+# so choosing another stick (install.sh, HOTAS Mapper) needs no reinstall.
+
+# Start the service when a joystick appears (boot coldplug included). It exits
+# again at once if none of the configured sticks is connected.
+ACTION=="add", SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_JOYSTICK}=="1", TAG+="systemd", ENV{SYSTEMD_WANTS}+="vkb-hotas.service"
+
+# The virtual T.16000M and TWCS Throttle are uhid devices with no USB parent:
+# give the seat user access to their hidraw nodes so Wine's hidraw backend can
+# open them.
+SUBSYSTEM=="hidraw", KERNELS=="0003:044F:B10A.*", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="hidraw", KERNELS=="0003:044F:B687.*", MODE="0660", TAG+="uaccess"

@@ -4,7 +4,7 @@ Verify the vkb-hotas setup and analyse Proton logs.
 
   vkb-check.py               host checks + analysis of the newest Proton log
   vkb-check.py LOGFILE       analyse a specific log
-  vkb-check.py --device V:P  check a stick other than the configured one
+  vkb-check.py --device V:P  check a stick other than the configured one (as the stick role)
 
 Proton logs come from launching a game with
   PROTON_LOG=1 WINEDEBUG=+hid,+dinput %command%
@@ -25,13 +25,14 @@ import socket
 # vkb_common lives in ../common in the repo and next to this file once installed
 _here = os.path.dirname(os.path.realpath(__file__))
 sys.path[:0] = [_here, os.path.join(os.path.dirname(_here), "common")]
-from vkb_common import CONFIG, EMULATED, default_match, load_mapping, mapping_path, parse_match
+from vkb_common import (CONFIG, EMULATED_IDS, EMULATED_NAMES, ROLES, exposed_roles, load_mapping, mapping_path,
+                        parse_match, role_selectors)
 
 if sys.stdout.isatty():
     OK, BAD, WARN, INFO = "\033[32mOK\033[0m", "\033[31mFAIL\033[0m", "\033[33mWARN\033[0m", "  "
 else:
     OK, BAD, WARN, INFO = "OK", "FAIL", "WARN", "  "
-EMU = f"{EMULATED[0]:04x}:{EMULATED[1]:04x}"
+EMU_IDS = set(EMULATED_IDS.values())
 
 
 def can_open(path):
@@ -62,7 +63,20 @@ def hid_name(hid):
         return "?"
 
 
-def host_checks(match):
+def configured_roles(stick_override=None):
+    """{role: (selector, exposed)} from the running daemon if reachable, else the config file."""
+    hello = daemon_hello()
+    if hello and "roles" in hello:
+        roles = {r: (v["selector"], v["exposed"]) for r, v in hello["roles"].items()}
+    else:
+        sel, exp = role_selectors(), exposed_roles()
+        roles = {r: (sel[r] if (sel[r] or r == "stick") else None, r in exp) for r in ROLES}
+    if stick_override is not None:
+        roles["stick"] = (stick_override, roles["stick"][1])
+    return roles
+
+
+def host_checks(stick_override):
     print("== host")
     st = subprocess.run(["systemctl", "is-active", "vkb-hotas.service"], capture_output=True, text=True).stdout.strip()
     print(f"  [{OK if st == 'active' else BAD}] vkb-hotas.service: {st or 'not installed'}")
@@ -72,26 +86,57 @@ def host_checks(match):
     print(f"  [{OK if os.path.exists(rules) else BAD}] udev rule {'installed' if os.path.exists(rules) else 'missing (run sudo ./install.sh)'}")
 
     mapper_checks()
-    vid, pid = parse_match(match)
-    real = [h for h in hid_devices(vid, pid) if f":{EMULATED[0]:04X}:{EMULATED[1]:04X}." not in h]
-    label = f"{vid:04x}:{pid:04x}" if pid is not None else f"{vid:04x}:*"
-    if not real:
-        print(f"  [{WARN}] real stick {label} not connected")
-    for h in real:
-        print(f"{INFO}real stick: {hid_name(h)} ({os.path.basename(h)})")
-        for n in nodes(h):
-            vis = can_open(n)
-            print(f"  [{BAD if vis else OK}] real    {n:20} {'OPENABLE by you: games will see it' if vis else 'hidden from your session'}")
-    virt = hid_devices(*EMULATED)
-    if not virt:
-        print(f"  [{BAD}] virtual T.16000M {EMU} not present")
-    for h in virt:
-        for n in nodes(h):
-            vis = can_open(n)
-            print(f"  [{OK if vis else BAD}] virtual {n:20} {'openable by you' if vis else 'NOT openable (udev rule missing?)'}")
-    if len(virt) > 1:
-        print(f"  [{WARN}] {len(virt)} devices with {EMU}: a real T.16000M is plugged in too; games may pick either")
-    sdl_probe(vid, pid)
+    roles = configured_roles(stick_override)
+    hide_rule = "/run/udev/rules.d/72-vkb-hotas-hide.rules"
+    hidden_any = False
+    for r in ROLES:
+        sel, exposed = roles[r]
+        if sel is None:
+            print(f"{INFO}{r}: not used (no {EMULATED_NAMES[r]})")
+            continue
+        vid, pid = parse_match(sel)
+        real = [h for h in hid_devices(vid, pid) if not any(f":{v:04X}:{p:04X}." in h for v, p in EMU_IDS)]
+        if "@" in sel:
+            real = real[:1] if len(real) > 1 else real  # sysfs can't tell ports apart here; show one
+        label = sel or "any VKB stick"
+        if not real:
+            print(f"  [{WARN}] {r}: real stick {label} not connected")
+        for h in real:
+            print(f"{INFO}{r}: {hid_name(h)} ({os.path.basename(h)}){'  EXPOSED to games (vkb-mapper --hide ' + r + ' to undo)' if exposed else ''}")
+            for n in nodes(h):
+                vis = can_open(n)
+                if exposed:
+                    print(f"  [{OK if vis else WARN}] real    {n:20} {'openable: games see the real stick (exposed)' if vis else 'not openable by you'}")
+                else:
+                    hidden_any = True
+                    print(f"  [{BAD if vis else OK}] real    {n:20} {'OPENABLE by you: games will see it' if vis else 'hidden from your session'}")
+        emu_id = EMULATED_IDS[r]
+        virt = hid_devices(*emu_id)
+        name = f"virtual {EMULATED_NAMES[r]} {emu_id[0]:04x}:{emu_id[1]:04x}"
+        if exposed:
+            print(f"  [{OK if not virt else WARN}] {name} {'removed while exposed' if not virt else 'present although exposed'}")
+        elif not virt:
+            print(f"  [{BAD if real else WARN}] {name} not present")
+        for h in ([] if exposed else virt):
+            for n in nodes(h):
+                vis = can_open(n)
+                print(f"  [{OK if vis else BAD}] virtual {n:20} {'openable by you' if vis else 'NOT openable (udev rule missing?)'}")
+        if len(virt) > 1:
+            print(f"  [{WARN}] {len(virt)} devices with {emu_id[0]:04x}:{emu_id[1]:04x}: a real {EMULATED_NAMES[r]} is plugged in too; games may pick either")
+    if hidden_any:
+        print(f"  [{OK if os.path.exists(hide_rule) else WARN}] runtime hiding rule {hide_rule} "
+              f"{'present' if os.path.exists(hide_rule) else 'missing (permissions may come back on a session change)'}")
+    sdl_probe(roles)
+
+
+def daemon_hello():
+    try:
+        with socket.socket(socket.AF_UNIX) as s:
+            s.settimeout(1)
+            s.connect("/run/vkb-hotas/ctl.sock")
+            return json.loads(s.makefile().readline())
+    except (OSError, ValueError):
+        return None
 
 
 def mapper_checks():
@@ -110,6 +155,8 @@ def mapper_checks():
             s.connect("/run/vkb-hotas/ctl.sock")
             hello = json.loads(s.makefile().readline())
         note = f", daemon reports: {hello['error']}" if hello.get("error") else ""
+        if "roles" not in hello:
+            note += ", but the daemon is an older version (reinstall: sudo ./install.sh)"
         print(f"  [{OK if not note else WARN}] control socket reachable: daemon applying \"{hello.get('profile')}\"{note}")
     except PermissionError:
         print(f"  [{BAD}] control socket not yours: set VKB_HOTAS_USER in {CONFIG} (or sudo ./install.sh --user $USER)")
@@ -117,7 +164,8 @@ def mapper_checks():
         print(f"  [{WARN}] control socket unavailable: daemon not running, or an older version without vkb-mapper support")
 
 
-def sdl_probe(vid, pid):
+def sdl_probe(roles):
+    real_ids = [(r, *parse_match(sel), exposed) for r, (sel, exposed) in roles.items() if sel is not None]
     for lib in ("libSDL3.so.0", "libSDL3.so"):
         try:
             sdl = ctypes.CDLL(lib)
@@ -145,19 +193,20 @@ def sdl_probe(vid, pid):
     for i in range(n.value):
         j = ids[i]
         v, p = sdl.SDL_GetJoystickVendorForID(j), sdl.SDL_GetJoystickProductForID(j)
-        is_real = v == vid and (pid is None or p == pid)
-        if not is_real and (v, p) != EMULATED:
+        real = next((x for x in real_ids if v == x[1] and (x[2] is None or p == x[2])), None)
+        if not real and (v, p) not in EMU_IDS:
             continue
         gp = sdl.SDL_IsGamepad(j)
-        good = not gp and not is_real
+        good = not gp and (not real or real[3])
+        note = ("  <- real stick, exposed on purpose" if real and real[3] else
+                "  <- real stick still visible" if real else "")
         print(f"    [{OK if good else BAD}] {v:04x}:{p:04x} {sdl.SDL_GetJoystickNameForID(j).decode(errors='replace')!r} "
-              f"type={types.get(sdl.SDL_GetJoystickTypeForID(j), '?')} gamepad={gp}"
-              f"{'  <- real stick still visible' if is_real else ''}")
+              f"type={types.get(sdl.SDL_GetJoystickTypeForID(j), '?')} gamepad={gp}{note}")
     sdl.SDL_Quit()
 
 
-def analyse(path, match):
-    vid, pid = parse_match(match)
+def analyse(path, roles):
+    real_ids = [(r, *parse_match(sel), exposed) for r, (sel, exposed) in roles.items() if sel is not None]
     print(f"\n== Proton log {path}")
     head = open(path, errors="replace").read(4000)
     for key, rx in (("proton", r"Proton: (.*)"), ("appid", r"SteamGameId: (\d+)")):
@@ -198,17 +247,24 @@ def analyse(path, match):
 
     print(f"{INFO}winebus SDL backend: {'disabled (hidraw path)' if sdl_off else 'ENABLED (run ./tools/proton-setup.py)'}")
     if devs:
-        emu = devs.get(EMULATED)
-        if emu is None:
-            print(f"  [{BAD}] virtual T.16000M never reached Wine (service down when the game started?)")
-        else:
-            print(f"  [{BAD if emu[0] else OK}] Wine created virtual T.16000M: "
-                  f"{'GAMEPAD' if emu[0] else 'joystick'} via {'hidraw' if emu[1] else 'SDL/evdev'}")
-        leaked = [k for k in devs if k[0] == vid and (pid is None or k[1] == pid)]
-        for v, p in leaked:
-            print(f"  [{BAD}] real stick {v:04x}:{p:04x} was visible to the game (not hidden)")
+        for r, (sel, exposed) in roles.items():
+            if sel is None or exposed:
+                continue
+            name = f"virtual {EMULATED_NAMES[r]}"
+            emu = devs.get(EMULATED_IDS[r])
+            if emu is None:
+                print(f"  [{BAD}] {name} never reached Wine (service down when the game started?)")
+            else:
+                print(f"  [{BAD if emu[0] else OK}] Wine created {name}: "
+                      f"{'GAMEPAD' if emu[0] else 'joystick'} via {'hidraw' if emu[1] else 'SDL/evdev'}")
+        leaked = [(k, x) for k in devs for x in real_ids if k[0] == x[1] and (x[2] is None or k[1] == x[2])]
+        for (v, p), x in leaked:
+            if x[3]:
+                print(f"{INFO}real {x[0]} stick {v:04x}:{p:04x} visible to the game (exposed on purpose)")
+            else:
+                print(f"  [{BAD}] real {x[0]} stick {v:04x}:{p:04x} was visible to the game (not hidden)")
         if not leaked:
-            print(f"  [{OK}] real stick not visible to the game")
+            print(f"  [{OK}] real sticks not visible to the game")
     elif traced:
         print(f"  [{WARN}] no HID devices in log")
 
@@ -239,15 +295,16 @@ def newest_log():
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("log", nargs="?", help="Proton log to analyse (default: newest steam-*.log)")
-    ap.add_argument("--device", default=default_match(), help="real stick VID[:PID] (default: from config, else any VKB)")
+    ap.add_argument("--device", default=None, help="real stick VID[:PID] for the stick role (default: from the daemon/config)")
     args = ap.parse_args()
+    roles = configured_roles(args.device)
     if args.log:
-        analyse(args.log, args.device)
+        analyse(args.log, roles)
         return
     host_checks(args.device)
     log = newest_log()
     if log:
-        analyse(log, args.device)
+        analyse(log, roles)
     else:
         print("\nno steam-*.log found (launch a game with PROTON_LOG=1 WINEDEBUG=+hid,+dinput %command%)")
 

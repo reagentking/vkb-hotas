@@ -1,5 +1,5 @@
 [Unit]
-Description=Flight stick -> virtual Thrustmaster T.16000M for Proton games (vkb-hotas)
+Description=Flight sticks -> virtual Thrustmaster T.16000M / TWCS Throttle for Proton games (vkb-hotas)
 Documentation=file:///usr/local/lib/vkb-hotas/README.md
 # Give up instead of looping forever on a bad config (see: journalctl -u vkb-hotas)
 StartLimitIntervalSec=60
@@ -9,5 +9,7 @@ StartLimitBurst=5
 Type=simple
 EnvironmentFile=-/etc/default/vkb-hotas
 ExecStart=/usr/local/lib/vkb-hotas/vkb-hotas.py --wait 5 $VKB_HOTAS_ARGS
+# Even after a crash: drop the runtime hiding rule and restore normal permissions
+ExecStopPost=-/usr/local/lib/vkb-hotas/vkb-hotas.py --cleanup
 Restart=on-failure
 RestartSec=2

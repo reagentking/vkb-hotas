@@ -3,11 +3,11 @@
 Record a stick's axes to work out the --axis mapping: which axes spring back
 to centre (stick, twist, thumb stick) and which hold position (throttle lever).
 
-  vkb-learn.py [SECONDS] [--device VID[:PID]|/dev/input/eventN]
+  vkb-learn.py [SECONDS] [--role stick|throttle | --device VID[:PID][@port]|/dev/input/eventN]
 
 Move every control through its full travel, then let go, before time runs out.
-Note: while vkb-hotas is running the real stick is hidden from you; stop it
-first (sudo systemctl stop vkb-hotas) or run this as root.
+Note: while vkb-hotas is running the real stick is hidden from you; give it to
+yourself first (vkb-mapper --expose ROLE, undo with --hide) or run this as root.
 """
 import os
 import argparse
@@ -21,19 +21,24 @@ from evdev import ecodes as E
 # vkb_common lives in ../common in the repo and next to this file once installed
 _here = os.path.dirname(os.path.realpath(__file__))
 sys.path[:0] = [_here, os.path.join(os.path.dirname(_here), "common")]
-from vkb_common import default_match, find_one
+from vkb_common import ROLES, find_one, role_selectors
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("seconds", nargs="?", type=float, default=60)
-    ap.add_argument("--device", default=default_match(), help="VID[:PID] or /dev/input/eventN (default: from config, else any VKB)")
+    ap.add_argument("--role", choices=ROLES, default="stick", help="record the stick configured for this role (default: stick)")
+    ap.add_argument("--device", help="VID[:PID][@port] or /dev/input/eventN instead of a role's stick")
     args = ap.parse_args()
+    if args.device is None:
+        args.device = role_selectors()[args.role]
+        if not args.device and args.role == "throttle":
+            sys.exit("no throttle stick configured (VKB_HOTAS_THROTTLE); pass --device")
 
     dev = evdev.InputDevice(args.device) if args.device.startswith("/dev/") else find_one(args.device)
     if dev is None:
         sys.exit("no matching stick readable by you. Is vkb-hotas hiding it? "
-                 "Try: sudo systemctl stop vkb-hotas, or run with sudo.")
+                 f"Try: vkb-mapper --expose {args.role} (undo: --hide {args.role}), or run with sudo.")
     ai = {c: a for c, a in dev.capabilities(absinfo=True)[E.EV_ABS] if not E.ABS_HAT0X <= c <= E.ABS_HAT3Y}
     start = {c: a.value for c, a in ai.items()}
     cur, lo, hi = dict(start), dict(start), dict(start)
@@ -60,7 +65,7 @@ def main():
         travel = 100 * (hi[c] - lo[c]) / span
         off = 100 * abs(cur[c] - (a.max + a.min) / 2) / (span / 2)
         verdict = ("not moved" if travel < 5 else
-                   "HOLDS POSITION: throttle-like (try --axis SLIDER=%s)" % E.ABS[c] if off > 15 else
+                   "HOLDS POSITION: throttle-like (a throttle axis in HOTAS Mapper: %s)" % E.ABS[c] if off > 15 else
                    "springs back to centre (stick/twist/thumb stick)")
         print(f"{E.ABS[c]:10} {travel:7.0f} {off:17.0f}  {verdict}")
     order = {code: i + 1 for i, code in enumerate(sorted(dev.capabilities()[E.EV_KEY]))}

@@ -14,15 +14,14 @@ default. Without a terminal, no app ids means Squadrons + Ace Combat 8.
 
 For each prefix:
   * winebus "Enable SDL"=0, so Wine uses its hidraw backend. That passes the
-    virtual T.16000M's HID descriptor through untouched and ignores SDL gamepad
+    virtual T.16000M's (and TWCS Throttle's) HID descriptor through untouched and ignores SDL gamepad
     mappings Steam injects (a common cause of "stick detected as a controller").
-  * Cached DirectInput instance entries for the real stick / T.16000M are
-    dropped so the game enumerates fresh.
+  * Cached DirectInput instance entries for the real sticks and the virtual
+    Thrustmaster devices are dropped so the game enumerates fresh.
 A timestamped backup is written next to each edited .reg file.
 """
 import sys
 import argparse
-import curses
 import glob
 import os
 import re
@@ -33,11 +32,12 @@ import time
 # vkb_common lives in ../common in the repo and next to this file once installed
 _here = os.path.dirname(os.path.realpath(__file__))
 sys.path[:0] = [_here, os.path.join(os.path.dirname(_here), "common")]
-from vkb_common import default_match, parse_match
+from vkb_common import EMULATED_IDS, checklist, parse_match, role_selectors
 
 DEFAULT_APPS = {"1222730": "STAR WARS: Squadrons", "2288340": "ACE COMBAT 8: WINGS OF THEVE"}
-LAUNCH = "PROTON_ENABLE_HIDRAW=0x044F/0xB10A %command%"
-LAUNCH_DEBUG = "PROTON_ENABLE_HIDRAW=0x044F/0xB10A PROTON_LOG=1 WINEDEBUG=+hid,+dinput %command%"
+HIDRAW = "PROTON_ENABLE_HIDRAW=" + ",".join(f"0x{v:04X}/0x{p:04X}" for v, p in EMULATED_IDS.values())
+LAUNCH = f"{HIDRAW} %command%"
+LAUNCH_DEBUG = f"{HIDRAW} PROTON_LOG=1 WINEDEBUG=+hid,+dinput %command%"
 STEAM_ROOTS = [
     "~/.local/share/Steam",
     "~/.steam/steam",
@@ -87,82 +87,6 @@ def is_configured(pfx):
         return False
     span = block_span(text, WINEBUS)
     return bool(span) and re.search(r'^"Enable SDL"=dword:0+$', text[span[0]:span[1]], re.M) is not None
-
-
-def _checklist_curses(scr, title, rows, checked):
-    for setup in (lambda: curses.curs_set(0), curses.use_default_colors):
-        try:
-            setup()  # cosmetic; some terminals don't support it
-        except curses.error:
-            pass
-    cur, top, sel = 0, 0, set(checked)
-    help_ = "Up/Down move  Space toggle  a all/none  Enter apply  q cancel"
-    while True:
-        h, w = scr.getmaxyx()
-        scr.erase()
-        avail = max(1, h - 4)
-        top = min(max(top, cur - avail + 1), cur)
-        scr.addnstr(0, 0, title, w - 1, curses.A_BOLD)
-        for i, (key, label, note) in enumerate(rows[top:top + avail], top):
-            line = f" [{'x' if key in sel else ' '}] {label}"
-            if note:
-                line = line.ljust(max(len(line) + 2, w - len(note) - 3)) + note
-            scr.addnstr(2 + i - top, 0, line, w - 1, curses.A_REVERSE if i == cur else 0)
-        scr.addnstr(h - 1, 0, help_, w - 1, curses.A_DIM)
-        scr.refresh()
-        k = scr.getch()
-        if k in (curses.KEY_UP, ord("k")):
-            cur = max(0, cur - 1)
-        elif k in (curses.KEY_DOWN, ord("j")):
-            cur = min(len(rows) - 1, cur + 1)
-        elif k in (curses.KEY_PPAGE,):
-            cur = max(0, cur - avail)
-        elif k in (curses.KEY_NPAGE,):
-            cur = min(len(rows) - 1, cur + avail)
-        elif k == ord(" "):
-            sel ^= {rows[cur][0]}
-        elif k == ord("a"):
-            sel = set() if len(sel) == len(rows) else {r[0] for r in rows}
-        elif k in (10, 13, curses.KEY_ENTER):
-            return sel
-        elif k in (27, ord("q")):
-            return None
-
-
-def _checklist_text(title, rows, checked):
-    print(title)
-    for n, (key, label, note) in enumerate(rows, 1):
-        print(f"  {n:>3}. [{'x' if key in checked else ' '}] {label}  {note}")
-    ans = input("Numbers to have checked (e.g. 1 4 7), 'all', 'none', Enter to keep as shown, q to cancel: ").strip().lower()
-    if ans == "q":
-        return None
-    if not ans:
-        return set(checked)
-    if ans == "all":
-        return {r[0] for r in rows}
-    if ans == "none":
-        return set()
-    picked = set()
-    for tok in ans.replace(",", " ").split():
-        if not tok.isdigit() or not 1 <= int(tok) <= len(rows):
-            sys.exit(f"not a number from the list: {tok}")
-        picked.add(rows[int(tok) - 1][0])
-    return picked
-
-
-def checklist(title, rows, checked):
-    """rows: [(key, label, note)]. Returns the set of checked keys, or None if cancelled."""
-    try:
-        curses.setupterm()
-        full_screen = curses.tigetstr("cup") is not None  # e.g. TERM=dumb can't position the cursor
-    except curses.error:
-        full_screen = False
-    if full_screen:
-        try:
-            return curses.wrapper(_checklist_curses, title, rows, checked)
-        except curses.error:
-            pass
-    return _checklist_text(title, rows, checked)
 
 
 def wine_running(pfx):
@@ -237,7 +161,8 @@ def main():
             print(f"  {appid:>10}  {'set up    ' if is_configured(pfx) else 'not set up'}  {name}")
         return
 
-    vidpids = [parse_match(default_match()), (0x044F, 0xB10A)]
+    vidpids = [parse_match(sel) for sel in role_selectors().values() if sel] or [parse_match("")]
+    vidpids += list(EMULATED_IDS.values())
     setup, undo = [], []
     if args.appids:
         (undo if args.undo else setup).extend(args.appids)

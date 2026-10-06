@@ -39,7 +39,37 @@ header{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:14px 24px
 .chain .dev.phys{border-color:rgba(255,181,71,.35);color:var(--amber)}
 .chain .dev.emu{border-color:rgba(70,229,255,.35);color:var(--cyan)}
 .chain .arrow{color:var(--dim);letter-spacing:-2px}
-.chain .arrow::after{content:"━━━▶"}
+.chain .arrow::after{content:"━▶"}
+.roletab{display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--line);border-radius:5px;background:transparent;font:12px var(--mono);color:var(--muted);min-width:0}
+.roletab .role{font:700 10px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding-right:2px}
+.roletab.on{border-color:var(--line2);background:rgba(15,23,32,.9);box-shadow:inset 0 -2px 0 var(--cyan)}
+.roletab.on .role{color:var(--text)}
+.roletab.unset .dev{opacity:.55}
+.roletab .dev{max-width:190px}
+.roletab .dev.phys{cursor:pointer}
+.roletab .dev.phys::after{content:" ▾";opacity:.7}
+.roletab .dev.phys:hover{border-color:var(--amber);background:var(--amber-d)}
+#devMenu{position:fixed;z-index:45;min-width:300px;max-width:min(520px,94vw);background:var(--panel);border:1px solid rgba(255,181,71,.45);border-radius:6px;padding:5px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+#devMenu[hidden]{display:none}
+#devMenu .hd{padding:5px 8px 6px;font:700 10px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+#devMenu button{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left;background:transparent;border:0;border-radius:4px;padding:7px 8px;font:12.5px var(--sans);color:var(--text)}
+#devMenu button:hover:not(:disabled){background:var(--amber-d);color:var(--amber)}
+#devMenu button:disabled{opacity:.5;cursor:default}
+#devMenu button.cur{color:var(--amber)}
+#devMenu .mk{width:12px;flex:none;color:var(--amber)}
+#devMenu small{margin-left:auto;font:11px var(--mono);color:var(--muted);white-space:nowrap}
+#devMenu .sep{height:1px;background:var(--line);margin:4px 2px}
+.roletab .exp{font:700 9px var(--mono);letter-spacing:.1em;color:#1b1205;background:var(--amber);border-radius:3px;padding:1px 4px}
+.banner{margin:0 0 14px;padding:9px 12px;border:1px solid rgba(255,181,71,.45);border-radius:5px;background:var(--amber-d);color:var(--amber);font-size:12.5px}
+.banner[hidden]{display:none}
+.banner code{font:12px var(--mono);color:var(--text)}
+#devModal .box{width:min(620px,94vw)}
+.devrole{border:1px solid var(--line);border-radius:5px;padding:12px;margin-bottom:12px;background:rgba(8,13,18,.6)}
+.devrole h5{margin:0 0 8px;font:700 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--cyan)}
+.devrole select{width:100%}
+.devrole .st{margin-top:8px;font-size:12px;color:var(--muted)}
+.devrole .st code{font:11.5px var(--mono);color:var(--text)}
+.chip .rl{font:700 9.5px var(--mono);letter-spacing:.06em;border:1px solid currentColor;border-radius:2px;padding:0 3px;opacity:.85}
 .pill{display:flex;align-items:center;gap:8px;font:600 11px var(--mono);letter-spacing:.12em;padding:6px 11px;border-radius:999px;border:1px solid var(--line2);white-space:nowrap}
 .pill .dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
 .pill.live{border-color:rgba(93,255,168,.4);color:var(--green)}
@@ -162,13 +192,13 @@ input[type=range]{accent-color:var(--cyan);width:100%}
 #learn small{display:block;font:500 11.5px var(--sans);color:var(--muted)}
 
 /* modal + toasts */
-#modal{position:fixed;inset:0;background:rgba(2,5,8,.7);display:grid;place-items:center;z-index:50}
-#modal[hidden]{display:none}
-#modal .box{width:min(420px,92vw);background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:20px}
-#modal h4{margin:0 0 12px;font:700 12px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--cyan)}
+#modal,#devModal{position:fixed;inset:0;background:rgba(2,5,8,.7);display:grid;place-items:center;z-index:50}
+#modal[hidden],#devModal[hidden]{display:none}
+#modal .box,#devModal .box{width:min(420px,92vw);background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:20px}
+#modal h4,#devModal h4{margin:0 0 12px;font:700 12px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--cyan)}
 #modal p{margin:0 0 14px;color:var(--muted)}
 #modal .input{width:100%;margin-bottom:16px}
-#modal .row{display:flex;gap:8px;justify-content:flex-end}
+#modal .row,#devModal .row{display:flex;gap:8px;justify-content:flex-end}
 #toasts{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:8px;z-index:60}
 .toast{padding:10px 14px;border-radius:5px;background:var(--panel2);border:1px solid var(--line2);font:12.5px var(--sans);box-shadow:0 8px 24px rgba(0,0,0,.4);animation:in .2s ease-out}
 .toast.err{border-color:rgba(255,93,108,.5)}
@@ -237,11 +267,8 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
 <body>
 <header>
   <div class="brand"><b>HOTAS</b>·<i>MAPPER</i></div>
-  <div class="chain">
-    <span class="dev phys" id="physName" title="Physical stick">physical stick</span>
-    <span class="arrow"></span>
-    <span class="dev emu" id="emuName" title="What games see">Thrustmaster T.16000M</span>
-  </div>
+  <div class="chain" id="roleTabs" title="Each real stick feeds one Thrustmaster device that games see"></div>
+  <button class="btn" id="devBtn" title="Choose which real stick feeds each Thrustmaster device">Devices</button>
   <div class="pill off" id="pill"><span class="dot"></span><span id="pillText">CONNECTING</span></div>
 </header>
 
@@ -254,7 +281,7 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
   <button class="btn danger" id="pDel">Delete</button>
   <span style="width:14px"></span>
   <label>Buttons</label>
-  <div class="seg" id="count"><button data-n="16">16</button><button data-n="32">32</button></div>
+  <div class="seg" id="count"></div>
   <span class="spacer"></span>
   <span class="save" id="save">loading…</span>
 </div>
@@ -263,15 +290,16 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
 
 <main>
   <section class="panel phys">
-    <h2>Your stick</h2>
+    <h2 id="physTitle">Your stick</h2>
     <p class="sub">Live input from the physical device. Lit tiles are pressed; the cyan tag shows which emulated control each button drives.</p>
+    <div class="banner" id="physBanner" hidden></div>
     <h3>Stick map</h3>
     <div class="maptools">
       <div class="tabs" id="viewTabs"></div>
       <button class="btn small" id="placeBtn" title="Press a button on your stick, then click where it is">Place pins</button>
       <button class="btn small" id="hatAddBtn" title="Set up a 4-way hat with center push (it reports as 5 buttons)">+ 5-way hat</button>
       <button class="btn small" id="photoBtn" title="Use a photo of your stick for this view">Photo…</button>
-      <select id="schemSel" title="Drawing for this view (each drawing keeps its own pins)"><optgroup label="VKB Gladiator NXT EVO"><option value="evo-ot-side">Omni Throttle (whole)</option><option value="evo-scg-head">SCG grip head</option><option value="evo-scg-side">SCG grip side (triggers)</option><option value="evo-base-front">EVO base (front)</option></optgroup><optgroup label="Generic"><option value="grip-front">Grip (front)</option><option value="grip-back">Grip (side)</option><option value="base">Base</option></optgroup></select>
+      <select id="schemSel" title="Drawing for this view (each drawing keeps its own pins)"><optgroup label="VKB Gladiator NXT EVO"><option value="evo-ot-side">Omni Throttle (whole)</option><option value="evo-scg-head">SCG grip head</option><option value="evo-scg-side">SCG grip side (triggers)</option><option value="evo-base-front">EVO base (front)</option></optgroup><optgroup label="VKB Gladiator NXT EVO, left hand"><option value="evo-ot-side-l">Omni Throttle L (whole)</option><option value="evo-scg-head-l">SCG grip head L</option><option value="evo-scg-side-l">SCG grip side L (triggers)</option><option value="evo-base-front-l">EVO base L (front)</option></optgroup><optgroup label="Generic"><option value="grip-front">Grip (front)</option><option value="grip-back">Grip (side)</option><option value="base">Base</option></optgroup></select>
       <button class="btn small" id="schemBtn" title="Remove the photo and use the drawing">Use drawing</button>
       <span class="spacer"></span>
       <button class="btn small" id="viewAdd">+ View</button>
@@ -290,8 +318,9 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
   </section>
 
   <section class="panel emu">
-    <h2>What the game sees</h2>
-    <p class="sub">The emulated T.16000M. Click <b>Assign</b>, then press a button (or hat direction) on your stick. <b>Shift</b>+Assign adds a second source. <b>Test</b> presses the button in-game, which helps you find out what each one does.</p>
+    <h2 id="emuTitle">What the game sees</h2>
+    <p class="sub"><span id="emuSub">The emulated T.16000M.</span> Click <b>Assign</b>, then press a button (or hat direction) on either stick. <b>Shift</b>+Assign adds a second source. <b>Test</b> presses the button in-game, which helps you find out what each one does.</p>
+    <div class="banner" id="emuBanner" hidden></div>
     <h3>Axes</h3>
     <div class="axcfg" id="emuAxes"></div>
     <h3>Hat</h3>
@@ -305,6 +334,8 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
 </main>
 <footer id="foot"></footer>
 
+<div id="devMenu" hidden role="menu"></div>
+<div id="devModal" hidden><div class="box"><h4>Devices</h4><div id="devBody"></div><div class="row"><button class="btn" id="devClose">Close</button></div></div></div>
 <div id="modal" hidden><div class="box"><h4 id="mTitle"></h4><p id="mText"></p><input class="input" id="mInput" maxlength="40"><div class="row"><button class="btn" id="mCancel">Cancel</button><button class="btn" id="mOk">OK</button></div></div></div>
 <div id="toasts"></div>
 <div id="tip" hidden></div>
@@ -314,7 +345,19 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
 const TOKEN = new URLSearchParams(location.search).get("t") || "";
 const $ = s => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
-const AXES = [["X","Roll"],["Y","Pitch"],["RZ","Twist / yaw"],["SLIDER","Throttle"]];
+// Each role: one real stick -> one emulated Thrustmaster device (see vkb_common.ROLES)
+const ROLES = ["stick", "throttle"];
+const ROLE_INFO = {
+  stick: {label: "Stick", short: "STK", emu: "Thrustmaster T.16000M", emuShort: "T.16000M", counts: [16, 32],
+          axes: [["X","Roll"],["Y","Pitch"],["RZ","Twist / yaw"],["SLIDER","Throttle"]],
+          defaults: {X:"ABS_X", Y:"ABS_Y", RZ:"ABS_RZ", SLIDER:"ABS_Z"}},
+  throttle: {label: "Throttle", short: "THR", emu: "Thrustmaster TWCS Throttle", emuShort: "TWCS", counts: [14, 32],
+          axes: [["Z","Throttle"],["X","Mini-stick X"],["Y","Mini-stick Y"],["RZ","Rocker / rudder"],["SLIDER","Antenna"],["RX","Toe brake R"],["RY","Toe brake L"]],
+          defaults: {Z:"ABS_Z", X:"ABS_RX", Y:"ABS_RY", RZ:"ABS_RZ"}},
+};
+let role = "stick", layoutAll = null, readOnly = false;
+const otherRole = r => r === "stick" ? "throttle" : "stick";
+const AXES = () => ROLE_INFO[role].axes;
 const HATS = [["up","↑"],["down","↓"],["left","←"],["right","→"]];
 const ARROW = {up:"↑",down:"↓",left:"←",right:"→"};
 const HATVAL = [[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]];
@@ -335,13 +378,29 @@ function toast(msg, err) {
 }
 function setSave(text, cls) { const s = $("#save"); s.textContent = text; s.className = "save " + (cls || ""); }
 
-const prof = () => mapping.profiles[mapping.active];
-const srcLabel = s => typeof s === "number" ? `BTN ${s}` : `HAT ${ARROW[s.slice(4)]}`;
+const profR = r => mapping.profiles[mapping.active][r];
+const prof = () => profR(role);
+const physInfo = (r = role) => hello?.roles?.[r]?.device || null;
+const emuInfo = (r = role) => hello?.roles?.[r]?.emulated || null;
+const rawOf = (m, r = role) => m?.roles?.[r]?.raw || null;
+// Sources are relative to the role whose section holds them: 5 / "hat:up" = that role's own
+// stick, "throttle:5" / "stick:hat:up" = the other stick (cross-mapping).
+function srcSplit(s, r = role) {
+  if (typeof s === "string") { const m = s.match(/^(stick|throttle):(.*)$/); if (m) return [m[1], /^\d+$/.test(m[2]) ? +m[2] : m[2]]; }
+  return [r, s];
+}
+const srcJoin = (pr, local, r = role) => pr === r ? local : `${pr}:${local}`;
+const parseSrc = str => /^\d+$/.test(str) ? +str : str;
+const localLabel = s => typeof s === "number" ? `BTN ${s}` : `HAT ${ARROW[s.slice(4)]}`;
+const srcLabel = s => { const [pr, l] = srcSplit(s); return (pr !== role ? ROLE_INFO[pr].short + " " : "") + localLabel(l); };
+const shortDev = n => (n || "").replace(/^VKB-Sim \(C\) Alex Oz \d{4}\s+/, "").trim();
 const outKeys = p => [...Object.keys(p.buttons).map(k => ["b", k]), ...HATS.map(([d]) => ["h", d])];
 const outList = (p, kind, key) => kind === "b" ? (p.buttons[key] ||= []) : (p.hat[key] ||= []);
 const outName = (kind, key) => kind === "b" ? `B${key}` : `HAT ${ARROW[key]}`;
+const outNameR = (r, kind, key) => (r !== role ? ROLE_INFO[r].emuShort + " " : "") + outName(kind, key);
 
 function scheduleSave() {
+  if (readOnly) { setSave("not saved: restart HOTAS Mapper", "err"); return; }
   setSave("saving…");
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
@@ -355,19 +414,23 @@ function scheduleSave() {
 function renderProfileBar() {
   const sel = $("#profile"); sel.textContent = "";
   for (const name of Object.keys(mapping.profiles)) { const o = el("option", null, name); o.value = name; o.selected = name === mapping.active; sel.append(o); }
-  for (const b of $("#count").children) b.classList.toggle("on", +b.dataset.n === prof().button_count);
+  const seg = $("#count"); seg.textContent = "";
+  for (const n of ROLE_INFO[role].counts) { const b = el("button", n === prof().button_count ? "on" : "", String(n)); b.dataset.n = n; seg.append(b); }
 }
 
 function renderEmuAxes() {
   const box = $("#emuAxes"); box.textContent = ""; refs.emuAx = {};
-  const physAxes = hello ? hello.device.axes.map(a => a.name) : [...new Set(Object.values(prof().axes).map(a => a.src).filter(Boolean))];
-  for (const [ax, role] of AXES) {
+  // own stick's axes, then the other stick's (cross-mapping)
+  const physAxes = [];
+  for (const r of [role, otherRole(role)]) for (const a of physInfo(r)?.axes || []) physAxes.push(srcJoin(r, a.name));
+  const axLabel = n => { const [pr, a] = srcSplit(n); return (pr !== role ? ROLE_INFO[pr].short + " " : "") + a.replace("ABS_", ""); };
+  for (const [ax, desc] of AXES()) {
     const cfg = prof().axes[ax];
     const row = el("div", "axc"); row.dataset.axis = ax;
-    const nm = el("div", "nm", ax); nm.append(el("small", null, role));
-    const sel = el("select"); sel.title = "Source axis on your stick";
-    for (const n of ["", ...physAxes]) { const o = el("option", null, n ? n.replace("ABS_", "") : "— none —"); o.value = n; o.selected = (cfg.src || "") === n; sel.append(o); }
-    if (cfg.src && !physAxes.includes(cfg.src)) { const o = el("option", null, cfg.src.replace("ABS_","") + " (missing)"); o.value = cfg.src; o.selected = true; sel.append(o); }
+    const nm = el("div", "nm", ax); nm.append(el("small", null, desc));
+    const sel = el("select"); sel.title = "Source axis (THR/STK = on the other stick)";
+    for (const n of ["", ...physAxes]) { const o = el("option", null, n ? axLabel(n) : "— none —"); o.value = n; o.selected = (cfg.src || "") === n; sel.append(o); }
+    if (cfg.src && !physAxes.includes(cfg.src)) { const o = el("option", null, axLabel(cfg.src) + " (missing)"); o.value = cfg.src; o.selected = true; sel.append(o); }
     sel.onchange = () => { cfg.src = sel.value || null; scheduleSave(); };
     const inv = el("label", "toggle"); const cb = el("input"); cb.type = "checkbox"; cb.checked = cfg.invert; inv.append(cb, "INVERT");
     cb.onchange = () => { cfg.invert = cb.checked; scheduleSave(); };
@@ -401,23 +464,28 @@ function compass(box, store) {
 }
 
 // physical button names (layout.names) and 5-way hat membership
-const physName = n => (typeof n === "number" && layout?.names?.[n]) || "";
-function hatBadge(n) {
-  if (typeof n !== "number" || !layout) return "";
-  const o = clusterOf(n);
+// physical button names and 5-way hats belong to one stick's layout section
+const physNameR = (pr, n) => (typeof n === "number" && layoutAll?.devices?.[pr]?.names?.[n]) || "";
+const physName = n => physNameR(role, n);
+function hatBadgeR(pr, n) {
+  if (typeof n !== "number" || !layoutAll) return "";
+  const o = clusterOfR(pr, n);
   return o ? `${o.c.name} ${CL_GLYPH[o.dir]}` : "";
 }
+const hatBadge = n => hatBadgeR(role, n);
 function describeSrc(s) {
   // "BTN 11 (Thumb up · Hat 2 ▲)" for toasts and tooltips
-  const extra = [physName(s), hatBadge(s)].filter(Boolean).join(" · ");
+  const [pr, l] = srcSplit(s);
+  const extra = [physNameR(pr, l), hatBadgeR(pr, l)].filter(Boolean).join(" · ");
   return srcLabel(s) + (extra ? ` (${extra})` : "");
 }
-async function renamePhys(n) {
-  if (!layout) { toast("Button names need the stick map. Restart HOTAS Mapper if it says an older version is running.", true); return; }
-  const name = await ask(`Name button ${n}`, "Describe the physical button, e.g. “Trigger stage 1” or “Rapid-fire up”. Shared by all profiles; leave empty to clear.", physName(n));
+async function renamePhys(n, pr = role) {
+  if (!layoutAll) { toast("Button names need the stick map. Restart HOTAS Mapper if it says an older version is running.", true); return; }
+  const lay = layoutAll.devices[pr];
+  const name = await ask(`Name ${pr !== role ? ROLE_INFO[pr].label.toLowerCase() + " " : ""}button ${n}`, "Describe the physical button, e.g. “Trigger stage 1” or “Rapid-fire up”. Shared by all profiles; leave empty to clear.", physNameR(pr, n));
   if (name === null) return;
-  (layout.names ||= {});
-  if (name.trim()) layout.names[n] = name.trim().slice(0, 32); else delete layout.names[n];
+  (lay.names ||= {});
+  if (name.trim()) lay.names[n] = name.trim().slice(0, 32); else delete lay.names[n];
   saveLayout(); renderOutputs();
 }
 
@@ -425,15 +493,17 @@ function sourceChips(list, onRemove) {
   const chips = el("div", "chips");
   if (!list.length) chips.append(el("span", "none", "UNASSIGNED"));
   list.forEach((s, i) => {
+    const [pr, l] = srcSplit(s);
     const c = el("span", "chip"); c.dataset.src = String(s);
-    c.append(el("span", "sl", srcLabel(s)));
-    const nm = physName(s), hb = hatBadge(s);
+    if (pr !== role) { const t = el("span", "rl", ROLE_INFO[pr].short); t.title = `On the ${ROLE_INFO[pr].label.toLowerCase()} role's stick`; c.append(t); }
+    c.append(el("span", "sl", localLabel(l)));
+    const nm = physNameR(pr, l), hb = hatBadgeR(pr, l);
     if (nm) c.append(el("span", "nm", nm));
     if (hb) c.append(el("span", "hb", hb));
-    if (typeof s === "number") {
+    if (typeof l === "number") {
       c.classList.add("named-able");
-      c.title = `Button ${s}${nm ? ` “${nm}”` : ""}${hb ? `, part of ${hb}` : ""}. Click to ${nm ? "rename" : "name"} it.`;
-      c.onclick = e => { if (!e.target.closest("button")) renamePhys(s); };
+      c.title = `${pr !== role ? ROLE_INFO[pr].label + " stick b" : "B"}utton ${l}${nm ? ` “${nm}”` : ""}${hb ? `, part of ${hb}` : ""}. Click to ${nm ? "rename" : "name"} it.`;
+      c.onclick = e => { if (!e.target.closest("button")) renamePhys(l, pr); };
     }
     const x = el("button", null, "×"); x.title = "Remove"; x.onclick = () => onRemove(i);
     c.append(x); chips.append(c);
@@ -470,42 +540,162 @@ function renderOutputs() {
 
 function renderPhys() {
   const ax = $("#physAxes"); ax.textContent = ""; refs.physAx = {};
-  if (hello) for (const a of hello.device.axes) {
+  const dev = physInfo();
+  if (!dev) ax.append(el("span", "hint", hello ? "No stick connected for this role." : "waiting for the daemon…"));
+  if (dev) for (const a of dev.axes) {
     const row = el("div", "axrow"), t = track(), v = el("span", "val", "—");
     row.append(el("span", "nm", a.name.replace("ABS_", "")), t.root, v); ax.append(row);
     refs.physAx[a.name] = {...t, v, min:a.min, max:a.max};
   }
   const pb = $("#physBtns"); pb.textContent = ""; refs.pb = [];
-  const n = hello ? hello.device.buttons : 32;
+  const n = dev ? dev.buttons : 32;
   for (let i = 1; i <= n; i++) { const b = el("div", "pb", String(i)); b.append(el("small")); b.ondblclick = () => renamePhys(i); refs.pb[i] = b; pb.append(b); }
   renderPhysTags();
 }
 
 function renderPhysTags() {
   if (!mapping) return;
-  const p = prof(), tags = {};
-  for (const [kind, key] of outKeys(p)) for (const s of outList(p, kind, key)) if (typeof s === "number") (tags[s] ||= []).push(outName(kind, key));
+  // which emulated controls (of either device) each of this stick's buttons drives
+  const tags = {};
+  for (const r of ROLES) { const p = profR(r);
+    for (const [kind, key] of outKeys(p)) for (const s of outList(p, kind, key)) { const [pr, l] = srcSplit(s, r); if (pr === role && typeof l === "number") (tags[l] ||= []).push(outNameR(r, kind, key)); } }
   refs.pb.forEach((b, i) => { if (!b) return; const t = tags[i] || []; b.lastChild.textContent = t.length ? "→" + t.join(",") : ""; b.classList.toggle("mapped", t.length > 0);
     const nm = physName(i), hb = hatBadge(i); b.classList.toggle("named", !!nm);
     b.title = `Button ${i}` + (nm ? ` “${nm}”` : "") + (hb ? ` (${hb})` : "") + (t.length ? `: drives ${t.join(", ")}` : ": not used") + ". Double-click to name it."; });
 }
 
-function renderAll() { renderProfileBar(); renderEmuAxes(); renderOutputs(); renderPhys(); renderMap(); }
+function renderAll() { renderProfileBar(); renderEmuAxes(); renderOutputs(); renderPhys(); renderMap(); renderRoleTabs(); renderBanners(); }
+
+// ---------- roles and devices ----------
+function setRole(r) {
+  if (r === role) return;
+  if (learn) stopLearn();
+  placing = null; wizard = null;
+  role = r; layout = layoutAll ? layoutAll.devices[r] : null; viewId = null;
+  renderAll();
+  if (live) onState(live);  // paint the last known state; new states only come when something moves
+}
+function renderRoleTabs() {
+  const box = $("#roleTabs"); box.textContent = "";
+  for (const r of ROLES) {
+    const info = hello?.roles?.[r];
+    const b = el("button", "roletab" + (r === role ? " on" : "") + (info && info.selector == null ? " unset" : ""));
+    b.append(el("span", "role", ROLE_INFO[r].label));
+    const phys = info?.device ? shortDev(info.device.name) : !info ? "…" : info.selector == null ? "no stick" : "not connected";
+    const pd = el("span", "dev phys", phys);
+    pd.title = (info?.device ? `${info.device.name} ${info.device.id}. ` : "") + "Click to choose the real stick";
+    pd.onclick = e => { e.stopPropagation(); openDevMenu(r, pd); };
+    const ed = el("span", "dev emu", info?.emulated?.name || ROLE_INFO[r].emu);
+    b.append(pd, el("span", "arrow"), ed);
+    if (info?.exposed) { const x = el("span", "exp", "EXPOSED"); x.title = "Games see the real stick; the emulated device is removed"; b.append(x); }
+    b.title = `Edit the ${ROLE_INFO[r].emuShort} mapping`;
+    b.onclick = () => setRole(r); box.append(b);
+  }
+}
+function renderBanners() {
+  const info = hello?.roles?.[role], L = ROLE_INFO[role], pb = $("#physBanner"), eb = $("#emuBanner");
+  $("#physTitle").textContent = role === "stick" ? "Your stick" : "Your throttle stick";
+  $("#emuTitle").textContent = `What the game sees · ${L.emuShort}`;
+  $("#emuSub").textContent = `The emulated ${L.emu}.`;
+  pb.hidden = eb.hidden = true; pb.textContent = eb.textContent = "";
+  if (!info) return;
+  const code = t => { const c = el("code", null, t); return c; };
+  if (info.selector == null) { pb.append(`No real stick feeds the ${L.emuShort}. Pick one in `, el("b", null, "Devices"), " (you can still prepare its mapping)."); pb.hidden = false; }
+  else if (info.exposed) { pb.append("Exposed: games see this real stick as it is, and the emulated ", L.emuShort, " is removed. To emulate it again run ", code(`vkb-mapper --hide ${role}`), "."); pb.hidden = false; }
+  else if (!info.device) { pb.append(`Not connected (${info.selector || "any VKB stick"}). Plug it in; it's picked up automatically.`); pb.hidden = false; }
+  if (!info.emulated?.active && info.selector != null) { eb.append(`Games don't see a ${L.emuShort} right now. Changes are saved and apply once it's active.`); eb.hidden = false; }
+}
+function renderDevices() {
+  const body = $("#devBody"); body.textContent = "";
+  if (!hello) { body.append(el("p", "hint", "The daemon isn't running.")); return; }
+  for (const r of ROLES) {
+    const info = hello.roles[r], L = ROLE_INFO[r], box = el("div", "devrole");
+    box.append(el("h5", null, `${L.label} → ${L.emu}`));
+    const sel = el("select"); sel.title = `Real stick that feeds the ${L.emuShort}`;
+    if (r === "throttle") { const o = el("option", null, "— none (no TWCS Throttle) —"); o.value = ""; o.selected = info.selector == null; sel.append(o); }
+    let found = false;
+    for (const d of hello.devices) {
+      const mine = d.role === r || (!d.role && info.selector === d.selector && !info.device);
+      const other = d.role && d.role !== r ? ` · now the ${ROLE_INFO[d.role].label.toLowerCase()} (swaps)` : "";
+      const o = el("option", null, `${shortDev(d.name)}  ${d.selector}${other}`); o.value = d.selector; o.selected = mine; found ||= mine; sel.append(o);
+    }
+    if (info.selector != null && !found) { const o = el("option", null, `${info.selector || "any VKB stick"} · not connected`); o.value = info.selector; o.selected = true; o.disabled = true; sel.append(o); }
+    sel.onchange = async () => { if (!await selectDevice(r, sel.value || null, sel.selectedOptions[0].textContent.split("  ")[0])) renderDevices(); };
+    box.append(sel);
+    const st = el("div", "st");
+    if (info.selector == null) st.append("Not used.");
+    else if (info.exposed) st.append("Exposed: games see the real stick. Undo with ", el("code", null, `vkb-mapper --hide ${r}`));
+    else st.append(`Hidden from games and emulated as the ${L.emuShort}. To give games the real stick instead: `, el("code", null, `vkb-mapper --expose ${r}`));
+    box.append(st); body.append(box);
+  }
+  body.append(el("p", "hint", "The choice is saved for the service. Sticks with identical ids are told apart by USB port (the part after @)."));
+}
+async function selectDevice(r, device, label) {
+  const L = ROLE_INFO[r];
+  try { await api("POST", "/api/select", {role: r, device}); toast(device ? `${L.label}: ${label}` : `${L.label}: none`); return true; }
+  catch (e) { toast("Not changed: " + e.message, true); return false; }
+}
+// quick picker under a tab's real-stick name (the Devices dialog has the same choices plus status)
+function openDevMenu(r, anchor) {
+  const menu = $("#devMenu"), L = ROLE_INFO[r];
+  if (!menu.hidden && menu.dataset.role === r) { closeDevMenu(); return; }
+  menu.textContent = ""; menu.dataset.role = r;
+  if (!hello) { menu.append(el("div", "hd", "The daemon isn't running")); }
+  else {
+    const info = hello.roles[r];
+    menu.append(el("div", "hd", `Real stick for the ${L.emuShort}`));
+    const item = (label, note, value, cur, disabled) => {
+      const b = el("button", cur ? "cur" : ""); b.setAttribute("role", "menuitemradio");
+      b.append(el("span", "mk", cur ? "●" : ""), label); if (note) b.append(el("small", null, note));
+      b.disabled = !!disabled;
+      b.onclick = async () => { closeDevMenu(); if (!cur) await selectDevice(r, value, label); };
+      menu.append(b);
+    };
+    for (const d of hello.devices) {
+      const cur = d.role === r || (!d.role && info.selector === d.selector && !info.device);
+      const swap = d.role && d.role !== r ? `now the ${ROLE_INFO[d.role].label.toLowerCase()} · swaps` : d.selector;
+      item(shortDev(d.name), swap, d.selector, cur);
+    }
+    if (info.selector != null && !hello.devices.some(d => d.role === r || d.selector === info.selector))
+      item(info.selector || "any VKB stick", "not connected", info.selector, true, true);
+    if (!hello.devices.length) menu.append(el("div", "hd", "No joysticks connected"));
+    if (r === "throttle") { menu.append(el("div", "sep")); item("None", `no ${L.emuShort}`, null, info.selector == null); }
+    menu.append(el("div", "sep"));
+    const more = el("button", null); more.append(el("span", "mk", ""), "Devices…"); more.append(el("small", null, "status, expose"));
+    more.onclick = () => { closeDevMenu(); renderDevices(); $("#devModal").hidden = false; }; menu.append(more);
+  }
+  menu.hidden = false;
+  const a = anchor.getBoundingClientRect();
+  menu.style.top = (a.bottom + 6) + "px";
+  menu.style.left = Math.max(8, Math.min(a.left, innerWidth - menu.offsetWidth - 8)) + "px";
+}
+function closeDevMenu() { $("#devMenu").hidden = true; }
+document.addEventListener("click", e => { if (!$("#devMenu").hidden && !e.target.closest("#devMenu")) closeDevMenu(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDevMenu(); });
+window.addEventListener("resize", closeDevMenu);
+$("#devBtn").onclick = () => { renderDevices(); $("#devModal").hidden = false; };
+$("#devClose").onclick = () => { $("#devModal").hidden = true; };
 
 // ---------- live state ----------
 function onState(m) {
+  if (!m.roles) return;  // an older daemon
   live = m;
-  const pressed = new Set(m.raw.b);
+  const raw = rawOf(m) || {b: [], h: [0, 0], a: {}}, out = m.roles[role].out;
+  const pressed = new Set(raw.b);
   refs.pb.forEach((b, i) => b && b.classList.toggle("on", pressed.has(i)));
-  for (const [name, r] of Object.entries(refs.physAx)) { const v = m.raw.a[name]; if (v == null) continue; setTrack(r, (v - r.min) / ((r.max - r.min) || 1)); r.v.textContent = v; }
-  const [hx, hy] = m.raw.h;
+  for (const [name, r] of Object.entries(refs.physAx)) { const v = raw.a[name]; if (v == null) continue; setTrack(r, (v - r.min) / ((r.max - r.min) || 1)); r.v.textContent = v; }
+  const [hx, hy] = raw.h;
   for (const [k, s] of Object.entries(refs.physHat)) s.classList.toggle("on", hatOn(k, hx, hy));
+  m = {...m, out};
   const [ox, oy] = m.out.h < 8 ? HATVAL[m.out.h] : [0, 0];
   for (const [k, s] of Object.entries(refs.emuHat)) s.classList.toggle("on", hatOn(k, ox, oy));
   for (const [n, c] of Object.entries(refs.cards)) c.classList.toggle("on", !!(m.out.b & (1 << (n - 1))));
   for (const [d, c] of Object.entries(refs.hatCards)) c.classList.toggle("on", hatOn(d, ox, oy));
-  if (hello) for (const [ax, r] of Object.entries(refs.emuAx)) setTrack(r, m.out.a[ax] / (hello.emulated.axes[ax] || 1));
-  document.querySelectorAll(".chip").forEach(c => { const s = c.dataset.src; c.classList.toggle("on", /^\d+$/.test(s) ? pressed.has(+s) : hatOn(s.slice(4), hx, hy)); });
+  if (emuInfo()) for (const [ax, r] of Object.entries(refs.emuAx)) setTrack(r, m.out.a[ax] / (emuInfo().axes[ax] || 1));
+  document.querySelectorAll(".chip").forEach(c => {
+    const [pr, l] = srcSplit(parseSrc(c.dataset.src)), rr = rawOf(m, pr);
+    c.classList.toggle("on", !!rr && (typeof l === "number" ? rr.b.includes(l) : hatOn(l.slice(4), rr.h[0], rr.h[1])));
+  });
   updateMapLive(m);
   if (learn) detectLearn(m);
   else if (wizard) detectWizard(m);
@@ -523,12 +713,14 @@ function hatOn(k, x, y) {
 function startLearn(target, ev) {
   if (placing || wizard) { placing = null; wizard = null; renderMap(); }
   if (!live) { toast("The daemon isn't running, so live input isn't available. Start vkb-hotas first.", true); return; }
-  learn = {...target, add: !!(ev && ev.shiftKey), base: JSON.parse(JSON.stringify(live.raw))};
+  learn = {...target, add: !!(ev && ev.shiftKey), base: rawSnapshot(live)};
   const what = target.type === "axis" ? `the axis for ${target.axis}` : `a button or hat direction for ${outName(target.kind, target.key)}`;
   $("#learnText").textContent = target.type === "axis" ? `Move ${what}` : `Press ${what}`;
   $("#learnSub").textContent = target.type === "axis" ? "Push it well past a quarter of its travel." : (learn.add ? "Adding as an extra source (Shift)." : "Replaces this slot's sources and moves the button off any other slot.");
   $("#learn").hidden = false; markLearning();
 }
+// both sticks' raw state, so a press on either one can be learned
+const rawSnapshot = m => JSON.parse(JSON.stringify({stick: rawOf(m, "stick"), throttle: rawOf(m, "throttle")}));
 function stopLearn() { learn = null; $("#learn").hidden = true; markLearning(); }
 function markLearning() {
   document.querySelectorAll(".learning").forEach(e => e.classList.remove("learning"));
@@ -537,38 +729,51 @@ function markLearning() {
   else (learn.kind === "b" ? refs.cards[learn.key] : refs.hatCards[learn.key])?.classList.add("learning");
 }
 function detectLearn(m) {
+  const now = rawSnapshot(m);
   if (learn.type === "axis") {
     let best = null, bestD = 0.25;
-    for (const a of hello.device.axes) {
-      const d = Math.abs((m.raw.a[a.name] - learn.base.a[a.name]) / ((a.max - a.min) || 1));
-      if (d > bestD) { best = a.name; bestD = d; }
+    for (const r of ROLES) {
+      const raw = now[r], base = learn.base[r]; if (!raw || !base) continue;
+      for (const a of physInfo(r)?.axes || []) {
+        const d = Math.abs((raw.a[a.name] - base.a[a.name]) / ((a.max - a.min) || 1));
+        if (d > bestD) { best = srcJoin(r, a.name); bestD = d; }
+      }
     }
-    if (best) { prof().axes[learn.axis].src = best; toast(`${learn.axis} ← ${best.replace("ABS_", "")}`); stopLearn(); scheduleSave(); renderEmuAxes(); }
+    if (best) { prof().axes[learn.axis].src = best; toast(`${learn.axis} ← ${best.replace(/^(stick|throttle):/, m => ROLE_INFO[m.slice(0, -1)].short + " ").replace("ABS_", "")}`); stopLearn(); scheduleSave(); renderEmuAxes(); }
     return;
   }
-  let src = m.raw.b.find(b => !learn.base.b.includes(b));
-  if (src == null) {
-    const [x, y] = m.raw.h, [bx, by] = learn.base.h;
-    if (y < 0 && by >= 0) src = "hat:up"; else if (y > 0 && by <= 0) src = "hat:down";
-    else if (x < 0 && bx >= 0) src = "hat:left"; else if (x > 0 && bx <= 0) src = "hat:right";
+  let src = null;
+  for (const r of [role, otherRole(role)]) {
+    const raw = now[r], base = learn.base[r]; if (!raw || !base) continue;
+    let s = raw.b.find(b => !base.b.includes(b));
+    if (s == null) {
+      const [x, y] = raw.h, [bx, by] = base.h;
+      if (y < 0 && by >= 0) s = "hat:up"; else if (y > 0 && by <= 0) s = "hat:down";
+      else if (x < 0 && bx >= 0) s = "hat:left"; else if (x > 0 && bx <= 0) s = "hat:right";
+    }
+    if (s != null) { src = srcJoin(r, s); break; }
   }
-  if (src == null) { learn.base = JSON.parse(JSON.stringify(m.raw)); return; }  // track releases
+  if (src == null) { learn.base = now; return; }  // track releases
   assign(learn.kind, learn.key, src, learn.add); stopLearn();
 }
 function assign(kind, key, src, add) {
-  const p = prof(), moved = [];
-  for (const [k2, key2] of outKeys(p)) {
-    if (k2 === kind && key2 === key) continue;
-    const l = outList(p, k2, key2), i = l.indexOf(src);
-    if (i >= 0) { l.splice(i, 1); moved.push(outName(k2, key2)); }
+  // a physical control drives one emulated control: take it off every other slot, on both devices
+  const [pr, pl] = srcSplit(src), moved = [];
+  for (const r of ROLES) {
+    const p2 = profR(r);
+    for (const [k2, key2] of outKeys(p2)) {
+      if (r === role && k2 === kind && key2 === key) continue;
+      const l = outList(p2, k2, key2), i = l.findIndex(s => { const [a, b] = srcSplit(s, r); return a === pr && b === pl; });
+      if (i >= 0) { l.splice(i, 1); moved.push(outNameR(r, k2, key2)); }
+    }
   }
-  const list = outList(p, kind, key);
+  const list = outList(prof(), kind, key);
   if (add) { if (!list.includes(src)) list.push(src); } else list.splice(0, list.length, src);
   toast(`${describeSrc(src)} → ${outName(kind, key)}` + (moved.length ? ` (moved off ${moved.join(", ")})` : ""));
   scheduleSave(); renderOutputs();
 }
 async function pulse(n) {
-  try { await api("POST", "/api/pulse", {button:n}); }
+  try { await api("POST", "/api/pulse", {button:n, role}); }
   catch (e) { toast(e.message, true); }
 }
 
@@ -584,13 +789,14 @@ function ask(title, text, value, withInput = true) {
     inp.onkeydown = e => { if (e.key === "Enter") done(inp.value.trim()); if (e.key === "Escape") done(null); };
   });
 }
-function freshProfile(count) {
-  const p = {button_count: count, axes: {}, buttons: {}, hat: {}, labels: {}};
-  for (const [ax] of AXES) p.axes[ax] = {src: {X:"ABS_X",Y:"ABS_Y",RZ:"ABS_RZ",SLIDER:"ABS_Z"}[ax], invert:false, deadzone:0};
-  for (let i = 1; i <= count; i++) p.buttons[i] = [i];
+function freshRole(r, count) {
+  const p = {button_count: count || ROLE_INFO[r].counts[0], axes: {}, buttons: {}, hat: {}, labels: {}};
+  for (const [ax] of ROLE_INFO[r].axes) p.axes[ax] = {src: ROLE_INFO[r].defaults[ax] || null, invert:false, deadzone:0};
+  for (let i = 1; i <= p.button_count; i++) p.buttons[i] = [i];
   for (const [d] of HATS) p.hat[d] = [`hat:${d}`];
   return p;
 }
+const freshProfile = () => ({stick: freshRole("stick", profR("stick").button_count), throttle: freshRole("throttle", profR("throttle").button_count)});
 function validName(n) {
   if (!n) return false;
   if (n.length > 40) { toast("Names can be up to 40 characters", true); return false; }
@@ -598,8 +804,8 @@ function validName(n) {
   return true;
 }
 $("#profile").onchange = e => { mapping.active = e.target.value; stopLearn(); renderAll(); scheduleSave(); toast(`Profile "${mapping.active}" is now active`); };
-$("#pNew").onclick = async () => { const n = await ask("New profile", "Starts from the default 1:1 mapping.", ""); if (!validName(n)) return; mapping.profiles[n] = freshProfile(prof().button_count); mapping.active = n; renderAll(); scheduleSave(); };
-$("#pDup").onclick = async () => { const n = await ask("Duplicate profile", `Copy of "${mapping.active}".`, mapping.active + " copy"); if (!validName(n)) return; mapping.profiles[n] = JSON.parse(JSON.stringify(prof())); mapping.active = n; renderAll(); scheduleSave(); };
+$("#pNew").onclick = async () => { const n = await ask("New profile", "Starts from the default 1:1 mapping.", ""); if (!validName(n)) return; mapping.profiles[n] = freshProfile(); mapping.active = n; renderAll(); scheduleSave(); };
+$("#pDup").onclick = async () => { const n = await ask("Duplicate profile", `Copy of "${mapping.active}".`, mapping.active + " copy"); if (!validName(n)) return; mapping.profiles[n] = JSON.parse(JSON.stringify(mapping.profiles[mapping.active])); mapping.active = n; renderAll(); scheduleSave(); };
 $("#pRen").onclick = async () => {
   const old = mapping.active, n = await ask("Rename profile", "", old); if (!n || n === old || !validName(n)) return;
   const ps = {}; for (const [k, v] of Object.entries(mapping.profiles)) ps[k === old ? n : k] = v;
@@ -611,11 +817,11 @@ $("#pDel").onclick = async () => {
   delete mapping.profiles[mapping.active]; mapping.active = Object.keys(mapping.profiles)[0]; renderAll(); scheduleSave();
 };
 $("#count").onclick = e => {
-  const n = +e.target.dataset.n, p = prof(); if (!n || n === p.button_count) return;
-  if (n === 16) { for (const k of Object.keys(p.buttons)) if (+k > 16) delete p.buttons[k]; for (const k of Object.keys(p.labels)) if (/^\d+$/.test(k) && +k > 16) delete p.labels[k]; }
-  else { const used = new Set(Object.values(p.buttons).flat()); for (let i = 17; i <= 32; i++) p.buttons[i] = used.has(i) ? [] : [i]; }
+  const n = +e.target.dataset.n, p = prof(), base = ROLE_INFO[role].counts[0], L = ROLE_INFO[role]; if (!n || n === p.button_count) return;
+  if (n === base) { for (const k of Object.keys(p.buttons)) if (+k > base) delete p.buttons[k]; for (const k of Object.keys(p.labels)) if (/^\d+$/.test(k) && +k > base) delete p.labels[k]; }
+  else { const used = new Set(Object.values(p.buttons).flat()); for (let i = base + 1; i <= n; i++) p.buttons[i] = used.has(i) ? [] : [i]; }
   p.button_count = n; renderAll(); scheduleSave();
-  toast(n === 32 ? "32 buttons: games see a T.16000M with extra buttons" : "16 buttons: identical to a real T.16000M");
+  toast(n === base ? `${n} buttons: identical to a real ${L.emuShort}` : `${n} buttons: games see a ${L.emuShort} with extra buttons`);
 };
 $("#learnCancel").onclick = stopLearn;
 document.addEventListener("keydown", e => { if (e.key === "Escape" && learn) stopLearn(); });
@@ -718,6 +924,7 @@ const SCHEM = {
     <circle cx="110" cy="345" r="9" fill="none" stroke="#26364a" stroke-width="1.5"/><circle cx="140" cy="356" r="9" fill="none" stroke="#26364a" stroke-width="1.5"/></svg>`,
 };
 const curView = () => layout.views.find(v => v.id === viewId) || layout.views[0];
+const ownRaw = m => rawOf(m) || {b: [], h: [0, 0], a: {}};
 // pins are anchored to the picture (drawing or photo), not the view: switching a view's drawing
 // shows that drawing's own pins
 const picKey = v => v.image ? `photo:${v.image}` : `draw:${v.schematic}`;
@@ -726,11 +933,14 @@ const pinWhat = key => key === "hat" ? "the stick's hat" : key.startsWith("c:") 
 const pinLabel = key => key === "hat" ? "✥" : key;
 
 function reverseMap() {
-  // physical source -> [{name, label}] of emulated outputs it drives
-  const p = prof(), rev = {};
-  for (const [kind, key] of outKeys(p)) {
-    const lkey = kind === "b" ? key : `hat:${key}`;
-    for (const s of outList(p, kind, key)) (rev[String(s)] ||= []).push({name: outName(kind, key), label: p.labels[lkey] || ""});
+  // this stick's physical source -> [{name, label}] of emulated outputs (either device) it drives
+  const rev = {};
+  for (const r of ROLES) {
+    const p = profR(r);
+    for (const [kind, key] of outKeys(p)) {
+      const lkey = kind === "b" ? key : `hat:${key}`;
+      for (const s of outList(p, kind, key)) { const [pr, l] = srcSplit(s, r); if (pr === role) (rev[String(l)] ||= []).push({name: outNameR(r, kind, key), label: p.labels[lkey] || ""}); }
+    }
   }
   return rev;
 }
@@ -758,7 +968,11 @@ function renderMap() {
   $("#placeBtn").classList.toggle("on", !!placing); $("#placeBtn").textContent = placing ? "Done placing" : "Place pins";
   const cv = $("#canvas"); cv.textContent = ""; cv.classList.toggle("placing", !!placing);
   if (v.image) { const img = el("img"); img.alt = v.name; img.onload = applyZoom; img.src = `/api/image/${encodeURIComponent(v.image)}?t=${encodeURIComponent(TOKEN)}`; img.draggable = false; cv.append(img); }
-  else { cv.insertAdjacentHTML("beforeend", SCHEM[v.schematic] || SCHEM["evo-ot-side"]); }
+  else {
+    // "-l" drawings are the left-hand (mirrored) versions
+    cv.insertAdjacentHTML("beforeend", SCHEM[v.schematic.replace(/-l$/, "")] || SCHEM["evo-ot-side"]);
+    if (v.schematic.endsWith("-l")) cv.querySelector("svg").style.transform = "scaleX(-1)";
+  }
   $("#watermark").hidden = !!v.image;
   const rev = reverseMap(), pins = layout.pins[picKey(v)] || {};
   refs.pins = {};
@@ -787,7 +1001,7 @@ function renderMap() {
 
 function updateMapLive(m) {
   if (!refs.pins) return;
-  const pressed = new Set(m.raw.b), [hx, hy] = m.raw.h;
+  const raw = ownRaw(m), pressed = new Set(raw.b), [hx, hy] = raw.h;
   for (const [key, pin] of Object.entries(refs.pins)) pin.classList.toggle("on", key === "hat" ? (hx !== 0 || hy !== 0) : pressed.has(+key));
   for (const [b, seg] of Object.entries(refs.segs || {})) seg.classList.toggle("on", pressed.has(+b));
 }
@@ -805,13 +1019,14 @@ function hideTip() { $("#tip").hidden = true; }
 function crossHighlight(key, on) {
   const p = prof();
   for (const [kind, k] of outKeys(p)) {
-    const hit = outList(p, kind, k).some(s => key === "hat" ? String(s).startsWith("hat:") : String(s) === key);
+    const hit = outList(p, kind, k).some(s => { const [pr, l] = srcSplit(s); return pr === role && (key === "hat" ? String(l).startsWith("hat:") : String(l) === key); });
     const c = kind === "b" ? refs.cards[k] : refs.hatCards[k];
     if (c) c.classList.toggle("xhl", on && hit);
   }
 }
 function cardHighlight(kind, key, on) {
-  for (const s of outList(prof(), kind, key)) {
+  for (const s0 of outList(prof(), kind, key)) {
+    const [pr, s] = srcSplit(s0); if (pr !== role) continue;
     const pin = refs.pins?.[String(s).startsWith("hat:") ? "hat" : String(s)]; if (pin) pin.classList.toggle("xhl", on);
     const seg = refs.segs?.[s]; if (seg) seg.classList.toggle("xhl", on);
   }
@@ -822,7 +1037,8 @@ function startPlacing() {
   if (!live) { toast("The daemon isn't running, so button presses can't be detected. Start vkb-hotas first.", true); return; }
   if (learn) stopLearn();
   wizard = null;
-  placing = {pending: null, base: JSON.parse(JSON.stringify(live.raw))}; renderMap();
+  if (!rawOf(live)) { toast("This role's stick isn't connected.", true); return; }
+  placing = {pending: null, base: JSON.parse(JSON.stringify(ownRaw(live)))}; renderMap();
 }
 function stopPlacing() { placing = null; renderMap(); }
 function updatePlaceHint() {
@@ -831,10 +1047,11 @@ function updatePlaceHint() {
   h.textContent = placing.pending ? `Now click where ${pinWhat(placing.pending)} is (Esc to stop).` : "Press a button or push the hat on your stick… (a 5-way hat's buttons place the whole hat; drag to adjust, × removes)";
 }
 function detectPlacing(m) {
-  let src = m.raw.b.find(b => !placing.base.b.includes(b));
-  const [x, y] = m.raw.h, [bx, by] = placing.base.h;
+  const raw = ownRaw(m);
+  let src = raw.b.find(b => !placing.base.b.includes(b));
+  const [x, y] = raw.h, [bx, by] = placing.base.h;
   if (src == null && (x !== 0 || y !== 0) && bx === 0 && by === 0) src = "hat";
-  placing.base = JSON.parse(JSON.stringify(m.raw));
+  placing.base = JSON.parse(JSON.stringify(raw));
   if (src == null) return;
   const owner = src !== "hat" && clusterOf(src);
   placing.pending = owner ? `c:${owner.c.id}` : String(src); updatePlaceHint();
@@ -862,7 +1079,8 @@ function startDrag(e, pin, key) {
 // views + photos
 function saveLayout(now) {
   clearTimeout(layoutTimer);
-  const go = async () => { try { await api("PUT", "/api/layout", layout); } catch (e) { toast("Layout not saved: " + e.message, true); } };
+  if (readOnly || !layoutAll) return;
+  const go = async () => { try { await api("PUT", "/api/layout", layoutAll); } catch (e) { toast("Layout not saved: " + e.message, true); } };
   if (now) return go();
   layoutTimer = setTimeout(go, 300);
 }
@@ -873,7 +1091,7 @@ $("#photoBtn").onclick = () => $("#photoFile").click();
 $("#photoFile").onchange = async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   try {
-    const r = await fetch(`/api/image?view=${encodeURIComponent(curView().id)}`, {method: "POST", headers: {"X-Token": TOKEN, "Content-Type": f.type || "application/octet-stream"}, body: f});
+    const r = await fetch(`/api/image?view=${encodeURIComponent(curView().id)}&role=${role}`, {method: "POST", headers: {"X-Token": TOKEN, "Content-Type": f.type || "application/octet-stream"}, body: f});
     const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText);
     curView().image = j.image; await saveLayout(true); renderMap();
     toast("Photo added. Photos keep their own pins: place them with “Place pins”. “Use drawing” brings back the drawing's pins.");
@@ -899,7 +1117,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && wizard) st
 const zoomByView = {};
 let panState = null, suppressClick = false;
 const Z_MIN = 1, Z_MAX = 8;
-function zstate() { return zoomByView[viewId] ||= {z: 1, tx: 0, ty: 0}; }
+function zstate() { return zoomByView[role + ":" + viewId] ||= {z: 1, tx: 0, ty: 0}; }
 function clampZoom(zs) {
   const cv = $("#canvas"), W = cv.offsetWidth, H = cv.offsetHeight;
   zs.z = Math.max(Z_MIN, Math.min(Z_MAX, zs.z));
@@ -931,7 +1149,7 @@ $("#stage").addEventListener("wheel", e => {
 }, {passive: false});
 $("#zIn").onclick = () => zoomAt(...stageCenter(), 1.5);
 $("#zOut").onclick = () => zoomAt(...stageCenter(), 1 / 1.5);
-$("#zFit").onclick = () => { zoomByView[viewId] = {z: 1, tx: 0, ty: 0}; applyZoom(); };
+$("#zFit").onclick = () => { zoomByView[role + ":" + viewId] = {z: 1, tx: 0, ty: 0}; applyZoom(); };
 $("#stage").addEventListener("pointerdown", e => {
   if (e.button !== 0 || e.target.closest(".pin, .cluster, .zoombar") || zstate().z <= 1.001) return;
   const zs = zstate(); panState = {x: e.clientX, y: e.clientY, tx: zs.tx, ty: zs.ty, moved: false, id: e.pointerId};
@@ -955,17 +1173,19 @@ const CL_GLYPH = {up: "▲", right: "▶", down: "▼", left: "◀", center: "�
 const CL_WORD = {up: "UP", right: "RIGHT", down: "DOWN", left: "LEFT", center: "IN (center push)"};
 let wizard = null;
 function allClusters() { return layout?.hats || []; }
-function clusterOf(n) {
-  for (const c of allClusters()) for (const [d, b] of Object.entries(c.dirs)) if (b === n) return {c, dir: d};
+function clusterOfR(pr, n) {
+  for (const c of layoutAll?.devices?.[pr]?.hats || []) for (const [d, b] of Object.entries(c.dirs)) if (b === n) return {c, dir: d};
   return null;
 }
+const clusterOf = n => clusterOfR(role, n);
 async function startWizard() {
   if (!live) { toast("The daemon isn't running, so button presses can't be detected. Start vkb-hotas first.", true); return; }
   if (learn) stopLearn();
   placing = null;
   const name = await ask("New 5-way hat", "Name it (e.g. “Thumb hat”). Then you'll push each direction and press it in.", `Hat ${allClusters().length + 1}`);
   if (!name) { renderMap(); return; }
-  wizard = {step: 0, dirs: {}, name: name.slice(0, 24), base: JSON.parse(JSON.stringify(live.raw))};
+  if (!rawOf(live)) { toast("This role's stick isn't connected.", true); renderMap(); return; }
+  wizard = {step: 0, dirs: {}, name: name.slice(0, 24), base: JSON.parse(JSON.stringify(ownRaw(live)))};
   renderMap(); updateWizardHint();
 }
 function stopWizard(msg) { wizard = null; if (msg) toast(msg); renderMap(); }
@@ -981,8 +1201,8 @@ function updateWizardHint() {
 }
 function detectWizard(m) {
   const d = CL_DIRS[wizard.step];
-  const src = m.raw.b.find(b => !wizard.base.b.includes(b));
-  wizard.base = JSON.parse(JSON.stringify(m.raw));
+  const raw = ownRaw(m), src = raw.b.find(b => !wizard.base.b.includes(b));
+  wizard.base = JSON.parse(JSON.stringify(raw));
   if (!d || src == null) return;
   const owner = clusterOf(src);
   if (owner) { toast(`Button ${src} already belongs to “${owner.c.name}”`, true); return; }
@@ -1061,11 +1281,13 @@ function connect() {
     const m = JSON.parse(ev.data);
     if (m.t === "state") onState(m);
     else if (m.t === "hello") {
-      const first = !hello || hello.device.buttons !== m.device.buttons; hello = m;
-      $("#physName").textContent = `${m.device.name}  ${m.device.id}`; $("#emuName").textContent = `${m.emulated.name}  ${m.emulated.id}`;
+      if (!m.roles) { hello = null; live = null; setPill(false, "DAEMON OUT OF DATE"); toast("The vkb-hotas service is an older version: reinstall it (sudo ./install.sh).", true); return; }
+      const sig = h => JSON.stringify(ROLES.map(r => [h.roles[r].device?.id, h.roles[r].device?.buttons, h.roles[r].device?.axes?.length]));
+      const changed = !hello || sig(hello) !== sig(m); hello = m;
+      renderRoleTabs(); renderBanners(); if (!$("#devModal").hidden) renderDevices();
       setPill(true, "LIVE · " + m.profile.toUpperCase());
       if (m.error) setSave("daemon rejected file: " + m.error, "err");
-      if (first || !Object.keys(refs.physAx).length) { renderPhys(); renderEmuAxes(); }
+      if (changed || !Object.keys(refs.physAx).length) { renderPhys(); renderEmuAxes(); renderOutputs(); }
     } else if (m.t === "mapping") {
       if (m.ok) { setSave(`saved · applied “${m.profile}”`, "ok"); setPill(true, "LIVE · " + m.profile.toUpperCase()); }
       else { setSave("daemon rejected file: " + m.error, "err"); }
@@ -1080,14 +1302,15 @@ function connect() {
   compass($("#physHat"), refs.physHat); compass($("#emuHat"), refs.emuHat);
   try {
     const [r, l] = await Promise.all([api("GET", "/api/mapping"), api("GET", "/api/layout")]);
-    mapping = r.mapping; layout = l.layout;
-    if (l.api !== 5) {  // page updated on disk but an older mapper server is still running
-      layout = null;
+    mapping = r.mapping;
+    if (l.api !== 6) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
+      readOnly = true; layoutAll = layout = null;
+      for (const [k, p] of Object.entries(mapping.profiles)) if (!p.stick) mapping.profiles[k] = {stick: p, throttle: freshRole("throttle")};
       for (const sel of [".maptools", ".stage"]) document.querySelector(sel).hidden = true;
       $("#placeHint").textContent = "Stick map unavailable: restart HOTAS Mapper (an older version is still running).";
-      toast("HOTAS Mapper was updated. Close this tab, wait a minute and reopen HOTAS Mapper (or restart it). The stick map is disabled until then so nothing gets lost.", true);
-      setTimeout(() => toast("Restart HOTAS Mapper to use the stick map.", true), 6500);
-    }
+      toast("HOTAS Mapper was updated. Close this tab, wait a minute and reopen HOTAS Mapper (or restart it). Nothing is saved until then, so nothing gets lost.", true);
+      setTimeout(() => toast("Restart HOTAS Mapper to make changes.", true), 6500);
+    } else { layoutAll = l.layout; layout = layoutAll.devices[role]; }
     if (l.error) toast("Stick layout couldn't be read (" + l.error + "); showing defaults.", true);
     $("#foot").textContent = `mapping file: ${r.path}` + (r.exists ? "" : " (created on first change)");
     if (r.error) toast("Existing mapping file couldn't be read (" + r.error + "); showing defaults.", true);

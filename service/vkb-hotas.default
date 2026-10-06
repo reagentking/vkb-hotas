@@ -1,17 +1,29 @@
 # vkb-hotas configuration (systemd EnvironmentFile).
 # Comments must be on their own line; a "# ..." after a value becomes part of it.
-# After editing: sudo ./install.sh   (or: sudo systemctl restart vkb-hotas)
+# After editing: sudo systemctl restart vkb-hotas
+# install.sh and HOTAS Mapper's Devices panel write the device lines for you.
 
-# Real stick to remap, as VID:PID (see: sudo ./install.sh --list).
+# Real stick that games see as a Thrustmaster T.16000M, as VID:PID, or
+# VID:PID@usb-port when two connected sticks share a VID:PID
+# (see: sudo ./install.sh --list).
 VKB_HOTAS_DEVICE=""
+
+# Optional second real stick that games see as a Thrustmaster TWCS Throttle
+# (same format; empty = no throttle).
+VKB_HOTAS_THROTTLE=""
+
+# Roles whose real stick is given to games untouched instead (stick, throttle,
+# or both, space separated). Set with: vkb-mapper --expose ROLE / --hide ROLE
+VKB_HOTAS_EXPOSE=""
 
 # Desktop user allowed to remap with vkb-mapper (owns the control socket and
 # ~USER/.config/vkb-hotas/mapping.json). install.sh fills in the sudo caller.
 VKB_HOTAS_USER=""
 
 # Extra daemon arguments (see: /usr/local/lib/vkb-hotas/vkb-hotas.py --help).
-# Axis/button options here only set the built-in default profile: once you save a
-# mapping in vkb-mapper, the mapping file's active profile takes precedence. Examples:
+# Axis/button options here only set the built-in default T.16000M profile: once
+# you save a mapping in vkb-mapper, the mapping file's active profile takes
+# precedence. Examples:
 #VKB_HOTAS_ARGS="--button-count 32"
 #VKB_HOTAS_ARGS="--button-count 32 --invert SLIDER"
 #VKB_HOTAS_ARGS="--axis SLIDER=ABS_RX --axis RZ=ABS_Z"

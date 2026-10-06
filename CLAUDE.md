@@ -4,15 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-vkb-hotas makes an unsupported flight stick (built for a VKB Gladiator NXT EVO Omni Throttle R,
+vkb-hotas makes unsupported flight sticks (built for a VKB Gladiator NXT EVO Omni Throttle R,
 `231d:3200`, but any evdev joystick works) usable in Proton games that only accept HOTAS models they
-recognise (Ace Combat 8, Star Wars: Squadrons). A root daemon grabs the real stick, re-creates it via
-`/dev/uhid` as a **Thrustmaster T.16000M (`044f:b10a`)**, and hides the real device from the user
-session. A browser-based GUI (HOTAS Mapper) remaps buttons and axes live, because AC8 has no
-rebinding for this stick.
+recognise (Ace Combat 8, Star Wars: Squadrons). A root daemon grabs the real sticks, re-creates them
+via `/dev/uhid` as Thrustmaster devices, and hides the real ones from the user session. Two
+**roles**: *stick* → **T.16000M (`044f:b10a`)**, required; *throttle* → **TWCS Throttle
+(`044f:b687`)**, optional (the user wants a left- and a right-hand Omni Throttle). Together they're
+Thrustmaster's T.16000M FCS HOTAS set. A browser-based GUI (HOTAS Mapper) remaps buttons and axes
+live, because AC8 has no rebinding for this stick.
 
 **Goals:**
-1. Games see exactly one stick, which they recognise as a T.16000M joystick (not a gamepad).
+1. Games see only the Thrustmaster devices, recognised as joysticks (not gamepads).
 2. Remapping without sudo and without restarting games.
 3. Shareable: no machine-specific assumptions; standard library plus python-evdev only.
 
@@ -20,13 +22,15 @@ rebinding for this stick.
 but shows controller button icons, and in-flight behaviour hasn't been confirmed yet. If AC8
 treats the T.16000M badly, the planned fallback is emulating a Logitech X56 instead.
 Project Wingman (appid 895870) opens the stick and receives input once its prefix is set up with
-`proton-setup.py 895870`; controls are bound in the game's own menu.
+`proton-setup.py 895870`; controls are bound in the game's own menu. The throttle role has only been
+tested against simulated sticks: the user doesn't own the left-hand OT yet, and its product id
+(`231d:3201` in the fake daemon) is a guess.
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
-| `service/` | root daemon `vkb-hotas.py`, systemd unit, config template, udev rule template |
+| `service/` | root daemon `vkb-hotas.py`, systemd unit, config template, udev rule |
 | `mapper/` | HOTAS Mapper server `vkb-mapper.py`, page `vkb-mapper.html`, `.desktop` entry |
 | `common/` | `vkb_common.py`, shared by service, mapper and tools |
 | `tools/` | user-run helpers: `proton-setup.py`, `vkb-check.py`, `vkb-learn.py` |
@@ -49,12 +53,15 @@ run as root.
 # Syntax-check everything (don't use py_compile: it writes __pycache__, see Gotchas)
 for f in */*.py; do python3 -c "import ast; ast.parse(open('$f').read())" || echo "FAIL $f"; done
 bash -n install.sh uninstall.sh
-t=$(mktemp --suffix=.rules); sed -e s/@VID@/231d/g -e s/@PID@/3200/g service/72-vkb-hotas.rules.in > $t; udevadm verify $t; rm $t
+t=$(mktemp --suffix=.rules); cp service/72-vkb-hotas.rules $t; udevadm verify $t; rm $t
 systemd-analyze verify service/vkb-hotas.service
 
 # Install / reinstall after any change (copies to /usr/local/lib/vkb-hotas, restarts the service)
-sudo ./install.sh [--device VID:PID] [--user NAME]     # --list shows connected sticks
+sudo ./install.sh [--device SEL] [--throttle SEL|none] [--pick] [--user NAME]   # --list shows sticks + selectors
 sudo ./uninstall.sh
+
+# Roles at runtime (as the user, over the control socket; no sudo)
+vkb-mapper --status | --expose stick|throttle|all | --hide stick|throttle|all
 
 # Verify the whole chain: service, hiding, virtual device, SDL view, control socket, mapping file,
 # plus analysis of the newest ~/steam-*.log
@@ -95,35 +102,41 @@ A game launch that produces an analysable log uses these launch options:
 
 ### Testing without root
 
-**GUI and control protocol:** `dev/fake-daemon.py` runs the daemon's real `Mapper`, `ControlServer`
-and `MappingWatcher` (imported from `service/vkb-hotas.py`) against a simulated Gladiator EVO OT R. It has no
-uhid, grab or udev, so it needs no root and no stick.
+**GUI, control protocol and the whole event loop:** `dev/fake-daemon.py` runs the daemon's real
+`Daemon` class (imported from `service/vkb-hotas.py`) with a `FakeSource` of simulated Omni Throttles
+(right `231d:3200`, left `231d:3201`), a `FakeUhid` and no hider. Only uhid, grabbing, udev and the
+real config file are swapped out (selection/expose persist to `DIR/config`), so device selection,
+swapping, exposing, cross-mapping and replugging are all testable without root.
 
 ```bash
-dev/fake-daemon.py [--button-count 32] [--still]          # socket + mapping in $XDG_RUNTIME_DIR/vkb-hotas-dev/
+dev/fake-daemon.py [--button-count 32] [--still] [--sticks 1|2] [--twin] [--throttle 231d:3201]
 VKB_HOTAS_CTL=$XDG_RUNTIME_DIR/vkb-hotas-dev/ctl.sock mapper/vkb-mapper.py --mapping $XDG_RUNTIME_DIR/vkb-hotas-dev/mapping.json
-dev/fake-daemon.py --press 17          # simulate physical button 17 (or hat:left etc.) being pressed
+dev/fake-daemon.py --press 17 [--stick 1]   # simulate a press (or hat:left etc.) on simulated stick N
+dev/fake-daemon.py --unplug 1 / --plug 1    # simulate unplugging / replugging stick N
 ```
 
-- **Extra command:** the fake daemon also accepts `{"cmd":"fake_press","source":...}`; the real
-  daemon doesn't.
-- **Keep it in step:** its main-loop message handling (hello / mapping / state / pulse) is a copy of
-  `main()` in `service/vkb-hotas.py`. Update both together.
+- **Extra commands:** `fake_press` and `fake_plug` on the socket; the real daemon doesn't accept them.
+- `--twin` gives both sticks the same VID:PID, to test `@port` selectors.
 - **Socket path limit:** unix socket paths max out at 107 bytes, so keep `--dir` short.
 
-**Mapper logic in isolation:** load the hyphenated daemon file with importlib and feed it events.
-`FakeStick` in `dev/fake-daemon.py` is a ready-made fake device.
+**Mapper logic in isolation:** load the hyphenated daemon file with importlib. A `Mapper` is one
+role's output; it reads every role's `PhysState`, which is how cross-mapping works. `FakeStick` in
+`dev/fake-daemon.py` is a ready-made fake device.
 
 ```python
 import importlib.util
 sys.path.insert(0, "common"); s = importlib.util.spec_from_file_location("v", "service/vkb-hotas.py"); v = importlib.util.module_from_spec(s); s.loader.exec_module(v)
-m = v.Mapper(FakeStick(), v.T16000M); m.apply(vkb_common.normalize_profile({...}))
-m.feed(evdev.InputEvent(0, 0, E.EV_KEY, 0x2c0, 1)); m.output(time.monotonic())  # -> (mask, hat, axes)
+m = v.Mapper("stick"); m.apply(vkb_common.normalize_profile({...})["stick"])
+ps = v.PhysState(FakeStick(0, 0x3200, "R")); ps.feed(evdev.InputEvent(0, 0, E.EV_KEY, 0x2c0, 1))
+m.output(time.monotonic(), {"stick": ps, "throttle": None})   # -> (mask, hat, axes)
 ```
 
+**Socket tests from Claude Code** need `dangerouslyDisableSandbox`: the Bash sandbox blocks unix
+sockets and `$XDG_RUNTIME_DIR`. The `test-mapper-ui` scripts already assume that.
+
 **Root-only paths** (uhid, hiding, udev) can only be tested on the installed service. Live checks:
-- send `{"cmd":"pulse","button":N}` to `/run/vkb-hotas/ctl.sock` (read the `hello` line first) and
-  watch `EV_KEY` on the virtual evdev node;
+- send `{"cmd":"pulse","role":"stick","button":N}` to `/run/vkb-hotas/ctl.sock` (read the `hello`
+  line first) and watch `EV_KEY` on the virtual evdev node;
 - write `~/.config/vkb-hotas/mapping.json` and watch the profile in the socket's `hello`. Delete
   the file afterwards to restore the built-in default.
 
@@ -132,44 +145,92 @@ When killing test processes, select them via `/proc/<pid>/cmdline` (see Gotchas)
 ## Architecture
 
 ```
-real stick ─evdev (EVIOCGRAB)─▶ vkb-hotas.py (root) ─/dev/uhid─▶ virtual T.16000M (hidraw+evdev) ─▶ Wine winebus (hidraw) ─▶ DirectInput ─▶ game
+real stick ─────┐                                     ┌─▶ virtual T.16000M      ─┐
+                ├─evdev (EVIOCGRAB)─▶ vkb-hotas.py ───┤                           ├─(hidraw)─▶ Wine winebus ─▶ DirectInput ─▶ game
+throttle stick ─┘                       (root)        └─▶ virtual TWCS Throttle ─┘
                                    ▲            │
           ~/.config/vkb-hotas/mapping.json      └─ /run/vkb-hotas/ctl.sock (JSON lines) ◀─▶ vkb-mapper.py (user, 127.0.0.1 HTTP+SSE) ◀─▶ vkb-mapper.html
 ```
 
-**Daemon (`service/vkb-hotas.py`).** A single-threaded `poll()` loop over the evdev fd, the uhid fd and the
-control-socket fds. The poll set is rebuilt every iteration, because the uhid device is destroyed
-and re-created whenever `button_count` changes (16 ↔ 32 changes the HID descriptor).
+**Daemon (`service/vkb-hotas.py`).** `main()` only parses arguments and builds a **`Daemon`**, whose
+single-threaded `poll()` loop serves both roles. It takes its collaborators as arguments
+(`source`, `make_uhid`, `hider`, `persist`), which is how `dev/fake-daemon.py` reuses the same loop.
+The poll set is rebuilt every iteration, because devices come and go: sticks attach/detach, and a
+virtual device is destroyed and re-created when its `button_count` changes the HID descriptor.
 
-- **`Mapper`** holds the physical state (raw axes, pressed button numbers, hat) and computes the
-  9- or 11-byte T.16000M report from the active profile.
+- **`Role`** (one per role) holds the selector, `exposed`, the attached evdev device and its
+  `PhysState`, its hidden nodes, its `Mapper` and its `Uhid`.
+- **`PhysState`**: one real stick's raw axes, pressed button numbers and hat.
+- **`Mapper`**: one role's output. Computes that emulated device's report from the role's profile
+  section and *every* role's `PhysState` (cross-mapping). `make_spec(role, n)` gives the HID
+  descriptor and packer: T.16000M 9/11 bytes; TWCS 17/19 bytes (buttons padded to a byte, hat, 7 u16
+  axes X Y Z Rx Ry Rz Slider). The T.16000M descriptor is byte-identical to the pre-roles version.
+- **Scanning:** every second, `scan()` lists joysticks (`list_sticks`: EV_ABS plus joystick/gamepad
+  buttons, no touchpads, not our own `phys == vkb-hotas/uhid`), attaches configured sticks that
+  appeared and publishes the list in `hello.devices`. An unplugged stick is detected by
+  POLLHUP/ENODEV and detached, but its **virtual device stays** (neutral), so running games keep it;
+  the stick re-attaches when it's back. The daemon only exits at start, if no configured stick shows
+  up within `--wait`.
+- **Selectors:** `VID:PID`, or `VID:PID@<port>` (the evdev `phys` minus `/inputN`) when two
+  connected sticks share a VID:PID; `selector_for()` adds the port only then. A vague legacy
+  selector (`""` = any VKB, vendor only) never takes a stick another role names exactly.
+- **Commands** (control socket): `hello`; `pulse {role, button}`; `select {role, device|null}`
+  (validated against connected sticks; picking the other role's stick swaps them; the stick role
+  can't be none); `expose {role|"all", on}`. `select`/`expose` reply `{"t":"result","ok","error"}`
+  to the caller only, *after* broadcasting the new `hello`, and persist to `/etc/default/vkb-hotas`
+  through `write_config` (atomic, keeps other lines, refuses odd characters).
+- **Exposing** a role: ungrab, unhide, destroy its virtual device; its events are still read (live
+  view, cross-mapped sources). Persisted as `VKB_HOTAS_EXPOSE`.
+- **Messages:** `hello {roles{r: selector, exposed, device|null, emulated{name,id,buttons,axes,
+  active}}, devices[], profile, mapping, error}`; `state {roles{r: raw|null, out}}` (≤30 Hz, only
+  when something changed; `out` is computed even while exposed); `mapping`; `result`.
 - **`MappingWatcher`** polls `mapping.json` every 0.5 s (inode, mtime, size). As root it refuses
   symlinks, non-regular files and files not owned by `VKB_HOTAS_USER`. When the file is missing, it
-  falls back to a profile built from the CLI args in `VKB_HOTAS_ARGS`.
-- **`ControlServer`** pushes `hello` / `state` (≤30 Hz, only when something changed) / `mapping`
-  messages, and accepts `{"cmd":"pulse","button":N}` and `{"cmd":"hello"}`.
+  falls back to a profile built from the CLI args in `VKB_HOTAS_ARGS` (stick section only).
 
-**Shared model (`common/vkb_common.py`).** Owns config parsing (`/etc/default/vkb-hotas`), device matching
-(`VKB_HOTAS_DEVICE` as VID[:PID], defaulting to any VKB vendor `231d`), and the mapping schema.
-`normalize_profile` / `normalize_mapping` are the single validator used by the daemon, the GUI
-server and the checker. Change the schema there and nowhere else.
+**User decisions behind the roles** (asked, not guessed):
+- Two Omni Throttles become a T.16000M + TWCS (not two T.16000Ms, not one merged device).
+- Sticks are chosen in the installer *and* live in HOTAS Mapper's Devices panel; the root daemon
+  accepting a "select" from the socket owner was accepted as the cost.
+- Cross-mapping is allowed: any source on either stick can feed either device.
+- Exposing is CLI only (`vkb-mapper --expose/--hide`, no GUI toggle), removes the virtual device,
+  and persists across restarts.
 
-- **Profile schema:** `button_count` (16|32); `axes{X,Y,RZ,SLIDER: {src, invert, deadzone%}}`;
-  `buttons{"N": [sources]}`; `hat{up,down,left,right: [sources]}`; `labels`.
-- **Sources:** a physical button number (1-based), or `"hat:<dir>"`.
+**Shared model (`common/vkb_common.py`).** Owns config reading/writing (`/etc/default/vkb-hotas`:
+`VKB_HOTAS_DEVICE`, `VKB_HOTAS_THROTTLE`, `VKB_HOTAS_EXPOSE`, `VKB_HOTAS_USER`, `VKB_HOTAS_ARGS`),
+roles and their emulated ids, axes and button counts, selectors and stick discovery, the mapping
+schema, and the terminal pickers (`checklist`, `pick_one`, used by `proton-setup.py` and
+`install.sh`). `normalize_profile` / `normalize_mapping` are the single validator used by the
+daemon, the GUI server and the checker. Change the schema there and nowhere else.
+
+- **Mapping version 2:** a profile is `{stick: SECTION, throttle: SECTION}`. A section is
+  `button_count` (stick 16|32, throttle 14|32); `axes{...: {src, invert, deadzone%}}` (stick X Y RZ
+  SLIDER; throttle X Y Z RX RY RZ SLIDER); `buttons{"N": [sources]}`; `hat{up,down,left,right:
+  [sources]}`; `labels`. Version 1 (one stick profile at the top level) becomes the stick section.
+- **Sources** are relative to the section's role: a physical button number (1-based) or
+  `"hat:<dir>"` on the role's own stick, or the same prefixed with the other role (`"throttle:5"`,
+  `"stick:hat:up"`). Axis sources likewise (`"ABS_Z"`, `"throttle:ABS_Z"`). The normalizer strips a
+  prefix naming the section's own role and drops duplicates. `split_source()` resolves them.
 
 **Physical button numbering** is the index into the sorted list of evdev `EV_KEY` codes (+1). That
 matches HID / VKBDevCfg numbering (Linux maps HID buttons 1–16 to `0x120–0x12f`, then `0x2c0+`).
 Keep every tool consistent with this.
 
-**Hiding the real stick takes two mechanisms; both are needed.**
-- The daemon creates `/run/vkb-hotas/active`. The generated `72-vkb-hotas.rules` then applies
-  `TAG-="uaccess", MODE="0600"`, so logind won't re-add the ACL on login or session switch.
+**Hiding a real stick takes two mechanisms; both are needed.**
+- The `Hider` writes `/run/udev/rules.d/72-vkb-hotas-hide.rules` with one
+  `KERNEL=="eventN|jsN|hidrawN", TAG-="uaccess", MODE="0600"` line per node of the sticks it
+  replaces, reloads udev and retriggers them, so logind won't re-add the ACL on login or session
+  switch. It's a runtime file (not generated at install) so that a stick chosen later in HOTAS
+  Mapper is hidden too. It sorts between `70-uaccess` and `73-seat-late` like the installed rule.
 - The daemon also `chmod 0600`s the nodes. With POSIX ACLs that zeroes the mask, which neutralises
   the ACL that is already applied.
-- On exit it removes the flag and runs `udevadm trigger --action=change`.
-- The rule file must sort after `70-uaccess` and before `73-seat-late`. It is generated by
-  `install.sh` from `service/72-vkb-hotas.rules.in` (`@VID@` / `@PID@`).
+- Detaching, exposing or exiting rewrites/removes the file and retriggers. Kernel names get reused
+  after an unplug, so a stale file must never survive: `--cleanup` (run at startup and as
+  `ExecStopPost`, i.e. even after a crash) deletes it, plus the pre-roles flag
+  `/run/vkb-hotas/active`, and retriggers input/hidraw.
+- The installed `service/72-vkb-hotas.rules` is now static: it starts the service on any joystick
+  `add` (`ENV{ID_INPUT_JOYSTICK}=="1"`; the daemon exits if no configured stick is there) and
+  grants `uaccess` on both virtual devices' hidraw nodes.
 
 **GUI (`mapper/vkb-mapper.py` + `.html`).** The server is stdlib `ThreadingHTTPServer`. It enforces three
 guards, and keeps them:
@@ -180,8 +241,17 @@ guards, and keeps them:
 - `/api/events` is SSE relaying the daemon socket. It coalesces state lines, and reconnects when
   the daemon restarts.
 - `PUT /api/mapping` validates via `vkb_common` and writes atomically.
-- `GET|PUT /api/layout`, `POST /api/image?view=ID` (raw body), and `GET /api/image/<name>` (token in
-  the query, so `<img>` works) back the stick map.
+- `GET|PUT /api/layout`, `POST /api/image?view=ID&role=R` (raw body), and `GET /api/image/<name>`
+  (token in the query, so `<img>` works) back the stick map.
+- `POST /api/pulse {role, button}` and `POST /api/select {role, device}` relay to the daemon
+  (`daemon_command`, which reads `hello` first). `--status` / `--expose` / `--hide` are the same
+  relay from the command line.
+- **The page is role-tabbed:** the header's role tabs switch both panels (that role's real stick on
+  the left, its emulated device on the right); the Devices dialog and the dropdown on a tab's real-stick name (`openDevMenu`) list
+  `hello.devices` per role; both go through `selectDevice()`.
+  In the page, `role` is the current tab, `prof()` its section, `layout` its layout section,
+  `srcSplit`/`srcJoin` convert sources, and Learn/Assign watch *both* sticks' raw state. Assigning
+  takes the physical control off every slot of *both* devices.
 - The server exits 45 s after its last SSE client disconnects.
 - **Single-instance file:** `$XDG_RUNTIME_DIR/vkb-mapper/url-<hash of mapping path + socket>`. It's
   keyed so test instances never hand over to the user's real mapper. A test instance once did
@@ -191,7 +261,10 @@ guards, and keeps them:
   because an old server would drop fields it doesn't know when saving. Bump `API_VERSION` (and the
   page's check) whenever the page relies on new server behaviour. History: 2 = clusters and `evo-*`
   drawings; 3 = `evo-scg-side` (an older server would silently swap unknown drawings on save);
-  4 = physical button `names`; 5 = layout format 2 (picture-anchored pins, global `hats`).
+  4 = physical button `names`; 5 = layout format 2 (picture-anchored pins, global `hats`);
+  6 = roles (mapping v2 with stick/throttle sections and cross sources, layout v3 per role, `-l`
+  drawings, `/api/select`). Since 6 a mismatch makes the page read-only (`readOnly`: no mapping or
+  layout saves at all), not just the stick map, because an old server would drop the throttle data.
 - The page is one self-contained file (CSP forbids external resources). Physical inputs are amber
   and emulated/game outputs are cyan.
 - **Stick map:** layout and photos are owned by the mapper server alone; the daemon never reads them.
@@ -199,7 +272,13 @@ guards, and keeps them:
   tests).
   - The layout is kept out of `mapping.json` deliberately: `normalize_mapping` drops unknown keys,
     and the layout describes hardware, not a game profile.
-  - **Format version 2:** `views`, `hats` (global), `pins` keyed by **picture**, and `names`.
+  - **Format version 3:** `{"version": 3, "devices": {"stick": DEVICE, "throttle": DEVICE}}`, one
+    section per role's real stick. A version 1/2 file becomes the stick's section
+    (`normalize_device_layout(lay, v1=...)`; sections inside v3 must never be treated as v1, which
+    once wiped pins on a second pass). Photos are unique across sections, and image cleanup uses
+    all of them.
+  - **A DEVICE section** (the old format 2): `views`, `hats` (global to that stick), `pins` keyed
+    by **picture**, and `names`.
     - A picture key is `draw:<schematic>` or `photo:<file>` (`picture_key()` on the server,
       `picKey()` in the page).
     - Pin keys are a button number, `"hat"`, or `c:<hat id>` for a 5-way hat's position; 0..1
@@ -230,6 +309,8 @@ guards, and keeps them:
     - `evo-*` are original line drawings of the Gladiator NXT EVO Omni Throttle, made from product
       photos: whole stick with the OTA bracket and grip tilted 38°, SCG grip head, SCG grip side
       (rapid-fire paddle above the dual-stage trigger, mini-stick), base front.
+    - `evo-*-l` are the same drawings mirrored (CSS `scaleX(-1)`), the throttle role's defaults
+      for a left-hand OT. They are separate picture keys, so their pins are separate too.
     - `grip-front` / `grip-back` / `base` are generic outlines for other sticks.
     - Pins are always placed by the user, never pre-filled, because button numbering differs per
       grip and firmware.
@@ -242,10 +323,12 @@ guards, and keeps them:
   - **Defaults only apply to new layouts:** `DEFAULT_LAYOUT` is used only when no `layout.json`
     exists. Existing layouts keep their views and drawings.
 
-**Proton side.** `tools/proton-setup.py` sets winebus `"Enable SDL"=dword:0` in each prefix's
+**Proton side.** Launch options name both virtual devices:
+`PROTON_ENABLE_HIDRAW=0x044F/0xB10A,0x044F/0xB687` (Proton matches the list by substring, so the
+separator doesn't matter). `tools/proton-setup.py` sets winebus `"Enable SDL"=dword:0` in each prefix's
 `system.reg`, so Wine uses its hidraw backend for everything. That passes the T.16000M HID
 descriptor through untouched, and ignores SDL gamepad mappings that Steam injects. It also drops
-cached `DirectInput\VID_…` entries from `user.reg`. "Set up" status = that value present
+cached `DirectInput\VID_…` entries (both configured sticks, both emulated ids) from `user.reg`. "Set up" status = that value present
 (`is_configured`). The checklist is desired-state, by the user's choice: it starts with set-up games
 checked, then applies the difference after a confirmation. It falls back to a numbered list when the
 terminal lacks cursor addressing (`tigetstr("cup")`): under `TERM=dumb` curses still starts, and
@@ -283,8 +366,17 @@ never written into Steam's `localconfig.vdf`.
   Use literal scratch paths for anything you need to delete afterwards.
 - **Steam holds the device open.** Steam opens the real stick at startup, and hiding doesn't revoke
   an existing fd. After install, Steam must be restarted.
-- **One source stick per install.** If the user owns a real T.16000M too, games see two identical
-  devices; `vkb-check.py` warns about this.
+- **At most two sticks** (one per role). If the user owns a real T.16000M or TWCS too, games see two
+  identical devices; `vkb-check.py` warns about this.
+- **`select`/`expose` order:** the daemon broadcasts the new `hello` *before* the caller's `result`,
+  so a client waiting for `result` has already read past it. Ask for a fresh `hello` afterwards.
+- **TWCS descriptor is approximate.** Its controls are documented (Z throttle, X/Y mini-stick, Rz
+  rocker, Slider antenna, Rx/Ry toe brakes, 14 buttons, hat) but its exact report descriptor wasn't
+  found; logical ranges are this project's choice.
+- **Testing curses pickers through a pty:** in keypad mode xterm sends arrows as `ESC O B`, not
+  `ESC [ B`; send the wrong one and the lone ESC reads as "cancel".
+- **Python 3.11 compatibility:** don't reuse quotes inside f-string expressions (Debian 12 has
+  3.11); the user's machine runs 3.14, so that bug wouldn't show locally.
 - **Every Proton game needs `proton-setup.py <appid>`.** The service is game-agnostic, but a prefix
   left on Wine's SDL backend can expose the stick as a gamepad. Project Wingman reads joysticks
   through its bundled `SDL2.dll` and the UE4 JoystickPlugin, which has `IgnoreGameControllers`;
@@ -305,6 +397,8 @@ never written into Steam's `localconfig.vdf`.
   report descriptors (`with_buttons` patches Usage Max and Report Count in place).
 - **udev and logind:** rule ordering, `uaccess`, `TEST==`, `TAG-=`, ACL masks, `SYSTEMD_WANTS`; systemd
   units (`StartLimit*` lives in `[Unit]`).
+- **Thrustmaster devices:** T.16000M and TWCS Throttle controls, ids and how games' HOTAS presets
+  recognise them.
 - **Wine/Proton input:** winebus backends (SDL / hidraw / evdev) and registry options,
   `PROTON_ENABLE_HIDRAW`, DirectInput device types, Wine `+hid,+dinput` trace format, Wine `.reg` file
   format.

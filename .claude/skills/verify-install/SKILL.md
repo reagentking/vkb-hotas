@@ -54,9 +54,13 @@ is to confirm three things. Each one has failed at least once before:
 Lead with the verdict ("Yes, it's working" / "Not yet: …"). Then cover:
 - **Install:** time and version, and whether all files match.
 - **Running mapper:** current, stale, or none.
-- **Health:** service, real stick hidden, virtual stick present, SDL sees a flight stick.
-- **The user's data:** what's in it (views, pins per picture, hats, names), so they can see their
-  work survived.
+- **Health:** service; per role (stick, throttle): the real stick hidden, or visible if that role is
+  exposed on purpose (`vkb-mapper --status`); the virtual device present; SDL sees flight sticks.
+- **Config:** which sticks feed which role (`VKB_HOTAS_DEVICE` / `VKB_HOTAS_THROTTLE` /
+  `VKB_HOTAS_EXPOSE`).
+- **The user's data:** what's in it (per stick: views, pins per picture, hats, names; per profile
+  section: button counts, axes, cross-stick sources), so they can see their work survived a format
+  conversion.
 - **Next steps:** usually what to do in the mapper next, or to restart it.
 
 Mention uncommitted repo changes only if the user has been asking you to commit.

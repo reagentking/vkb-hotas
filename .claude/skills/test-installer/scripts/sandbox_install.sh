@@ -3,12 +3,13 @@
 # System paths are redirected into the sandbox and systemctl/udevadm/modprobe are stubbed,
 # so nothing on the real system is touched. Verifies every installed file against its source.
 #
-#   sandbox_install.sh [--keep] [install.sh args...]     default args: --device 231d:3200 --user $USER
+#   sandbox_install.sh [--keep] [install.sh args...]
+#       default args: --device 231d:3200 --throttle 231d:3201@usb-0000:00:14.0-2 --user $USER
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../../.." && pwd)
 keep=0; [[ ${1:-} == --keep ]] && { keep=1; shift; }
-args=("$@"); [[ ${#args[@]} -eq 0 ]] && args=(--device 231d:3200 --user "$USER")
+args=("$@"); [[ ${#args[@]} -eq 0 ]] && args=(--device 231d:3200 --throttle 231d:3201@usb-0000:00:14.0-2 --user "$USER")
 export PYTHONDONTWRITEBYTECODE=1
 
 R=$(mktemp -d)
@@ -21,6 +22,7 @@ for c in systemctl udevadm modprobe; do
 done
 sandbox() {  # rewrite a repo script so it runs inside $R; keep it in the repo dir so $here resolves
     sed -e "s#/usr/local#$R/usr/local#g" -e "s#/etc/#$R/etc/#g" -e "s#/run/vkb-hotas#$R/run/vkb-hotas#g" \
+        -e "s#/run/udev/#$R/run/udev/#g" \
         -e 's#\[\[ \$EUID -eq 0 \]\] ||#true ||#' "$repo/$1" > "$repo/$2"
 }
 fail=0
@@ -42,13 +44,15 @@ while read -r f; do
     src=$(cd "$repo" && git ls-files --cached --others --exclude-standard | grep -E "(^|/)$name$" | head -1)
     if [[ -z $src ]]; then echo "  (no source) $f"; continue; fi
     if cmp -s "$repo/$src" "$R/$f"; then echo "  ok        $src -> /$f"; else echo "  MISMATCH  $src -> /$f"; fail=1; fi
-done < <(cd "$R" && find usr/local/lib etc/systemd usr/local/share -type f | sort)
+done < <(cd "$R" && find usr/local/lib etc/systemd etc/udev usr/local/share -type f | sort)
 
 echo "== generated files"
 rules=$R/etc/udev/rules.d/72-vkb-hotas.rules
-if [[ -f $rules ]] && ! grep -q '@VID@\|@PID@' "$rules"; then echo "  ok        udev rule rendered ($(grep -c 'ATTRS{idVendor}' "$rules") device lines)"; else echo "  FAIL      udev rule missing or unrendered"; fail=1; fi
 udevadm verify "$rules" >/dev/null 2>&1 && echo "  ok        udev rule verifies" || { echo "  FAIL      udevadm verify"; fail=1; }
-grep -E '^VKB_HOTAS_(DEVICE|USER)=' "$R/etc/default/vkb-hotas" | sed 's/^/  config    /'
+grep -E '^VKB_HOTAS_(DEVICE|THROTTLE|USER)=' "$R/etc/default/vkb-hotas" | sed 's/^/  config    /'
+for k in VKB_HOTAS_DEVICE VKB_HOTAS_THROTTLE VKB_HOTAS_USER; do
+    [[ $(grep -c "^$k=" "$R/etc/default/vkb-hotas") == 1 ]] || { echo "  FAIL      config has no single $k line"; fail=1; }
+done
 link=$R/usr/local/bin/vkb-mapper
 if [[ -L $link ]] && python3 "$link" --help >/dev/null 2>&1; then echo "  ok        launcher symlink runs"; else echo "  FAIL      launcher"; fail=1; fi
 if python3 "$R/usr/local/lib/vkb-hotas/vkb-hotas.py" --help >/dev/null 2>&1; then echo "  ok        installed daemon imports (flat layout)"; else echo "  FAIL      installed daemon"; fail=1; fi

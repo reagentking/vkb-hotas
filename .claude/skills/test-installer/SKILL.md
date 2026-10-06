@@ -12,7 +12,7 @@ where it fails, mid-install, on their system. Check it first in a sandbox.
 ## Run
 
 ```bash
-.claude/skills/test-installer/scripts/sandbox_install.sh            # default: --device 231d:3200 --user $USER
+.claude/skills/test-installer/scripts/sandbox_install.sh            # default: --device 231d:3200 --throttle 231d:3201@usb-... --user $USER
 .claude/skills/test-installer/scripts/sandbox_install.sh --keep ... # keep the sandbox for inspection
 ```
 
@@ -21,8 +21,8 @@ hides `/dev`, so `install.sh` stops at its `/dev/uhid missing` check and the run
 nothing wrong in the repo. The script itself writes only to a temp dir and the repo.
 
 What the script does:
-- Copies `install.sh` and `uninstall.sh` with `/usr/local`, `/etc/` and `/run/vkb-hotas` rewritten
-  into a temp root, and the root check disabled. The copies stay in the repo directory (deleted
+- Copies `install.sh` and `uninstall.sh` with `/usr/local`, `/etc/`, `/run/vkb-hotas` and
+  `/run/udev/` rewritten into a temp root, and the root check disabled. The copies stay in the repo directory (deleted
   afterwards), so the installer's `$here` still resolves the real sources.
 - Pre-creates the standard directories a real system already has (`/etc/modules-load.d`,
   `/etc/udev/rules.d`, …). The installer writes into some of them without `install -D`.
@@ -33,8 +33,10 @@ It then checks:
 - **Install:** exits 0, and lists the installed tree.
 - **Files:** every installed file is byte-identical to its repo source (matched by name). This
   catches a wrong or stale file copied, even when the install "succeeds".
-- **Generated files:** the udev rule is rendered (no `@VID@`) and passes `udevadm verify`; the
-  config has `VKB_HOTAS_DEVICE` and `VKB_HOTAS_USER`.
+- **Generated files:** the (now static) udev rule passes `udevadm verify`; the config has exactly
+  one `VKB_HOTAS_DEVICE`, `VKB_HOTAS_THROTTLE` and `VKB_HOTAS_USER` line each, written by
+  `write_config` (selectors like `231d:3200@usb-0000:18:00.3-2.1` are awkward for `sed`, so the
+  installer doesn't use it for them).
 - **Runs:** the `vkb-mapper` symlink runs, and the installed daemon imports from the flat layout.
 - **Uninstall:** removes everything except `/etc/default/vkb-hotas`, which is deliberately kept.
 
@@ -56,8 +58,9 @@ It then checks:
 - **Real system behaviour:** the stubs don't start services or apply udev rules. Real behaviour
   (the service starting, the stick hidden) needs the user's actual `sudo ./install.sh`, then the
   `verify-install` skill.
-- **Device autodetect:** it uses `--device` by default, because detection reads real input
-  devices.
+- **Device autodetect and the picker:** it passes `--device` by default and has no terminal, because
+  detection reads real input devices and the picker needs a TTY. Test `pick_one` itself through a
+  pty instead (see CLAUDE.md's gotcha about arrow-key sequences).
 
 The sandbox removes itself unless `--keep` was given. To delete a kept one, use its literal path,
 since `rm -rf` on a computed path is blocked by a safety check.

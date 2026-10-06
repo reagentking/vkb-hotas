@@ -5,6 +5,7 @@ set -uo pipefail
 systemctl stop vkb-hotas.service 2>/dev/null
 rm -f /etc/udev/rules.d/72-vkb-hotas.rules /etc/systemd/system/vkb-hotas.service \
       /etc/modules-load.d/vkb-hotas.conf /run/vkb-hotas/active \
+      /run/udev/rules.d/72-vkb-hotas-hide.rules \
       /usr/local/bin/vkb-mapper /usr/local/share/applications/vkb-mapper.desktop
 rm -rf /usr/local/lib/vkb-hotas
 systemctl daemon-reload

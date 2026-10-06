@@ -2,13 +2,17 @@
 """
 vkb-mapper: graphical button/axis remapper for vkb-hotas.
 
-Opens a local web UI in your browser. It shows your stick's live input, and
+Opens a local web UI in your browser. It shows your sticks' live input, and
 lets you choose which physical button drives each button / hat direction of the
-emulated T.16000M, plus axis sources, inversion and deadzones. Changes are
-saved to ~/.config/vkb-hotas/mapping.json and applied by the running daemon
-within half a second, even while a game is running.
+emulated T.16000M (and TWCS Throttle, with a second stick), plus axis sources,
+inversion and deadzones, and which real stick feeds each one. Changes are saved
+to ~/.config/vkb-hotas/mapping.json and applied by the running daemon within
+half a second, even while a game is running.
 
   vkb-mapper.py [--port N] [--no-browser]
+  vkb-mapper.py --expose stick|throttle|all   give the real stick(s) to games as they are
+  vkb-mapper.py --hide stick|throttle|all     hide them again and emulate the Thrustmaster devices
+  vkb-mapper.py --status                      show which stick feeds which role
 
 No extra packages needed. The server listens on 127.0.0.1 only, requires a
 per-session token, and exits shortly after the last browser tab closes.
@@ -35,14 +39,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.realpath(__file__))
 # vkb_common lives in ../common in the repo and next to this file once installed
 sys.path[:0] = [HERE, os.path.join(os.path.dirname(HERE), "common")]
-from vkb_common import (DEFAULT_AXES, EMU_AXES, default_profile, load_mapping,  # noqa: E402
+from vkb_common import (DEFAULT_AXES, EMU_AXES, ROLES, default_profile, load_mapping,  # noqa: E402
                         mapping_path, normalize_mapping, read_config)
 
 CTL = os.environ.get("VKB_HOTAS_CTL", "/run/vkb-hotas/ctl.sock")
 PAGE = os.path.join(HERE, "vkb-mapper.html")
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "vkb-mapper")
 IDLE_EXIT = 45  # seconds without any open UI before the server quits
-API_VERSION = 5  # bump when the page needs server features; the page refuses to edit layouts on a mismatch
+API_VERSION = 6  # bump when the page needs server features; the page refuses to save anything on a mismatch
 
 
 def initial_mapping():
@@ -64,9 +68,11 @@ def initial_mapping():
 
 # ---- Stick layout (pictures + pin positions) ------------------------------------
 # layout.json lives next to mapping.json. It describes the hardware, not a game, so
-# it's shared by all profiles and the daemon never reads it.
-#   {"version": 2,
-#    "views": [{"id": "stick", "name": "Whole stick", "schematic": "evo-ot-side", "image": null | "x-1a2b3c4d.jpg"}],
+# it's shared by all profiles and the daemon never reads it. One section per role
+# (the real stick behind the T.16000M, and the one behind the TWCS Throttle):
+#   {"version": 3, "devices": {"stick": DEVICE, "throttle": DEVICE}}
+# where DEVICE is
+#   {"views": [{"id": "stick", "name": "Whole stick", "schematic": "evo-ot-side", "image": null | "x-1a2b3c4d.jpg"}],
 #    "hats":  [{"id": "c1", "name": "Hat 2", "dirs": {"up": 11, "right": 12, "down": 13, "left": 14, "center": 15}}],
 #    "pins":  {"draw:evo-ot-side": {"17": [0.42, 0.31], "hat": [0.5, 0.12], "c:c1": [0.7, 0.1]},
 #              "photo:x-1a2b3c4d.jpg": {...}},
@@ -78,15 +84,25 @@ def initial_mapping():
 # hats are multi-way hats that report as separate buttons (VKB's 4-way hats with center push);
 # they're hardware, defined once and placeable on any picture; each direction is learned by
 # pressing it. Names are the user's labels for physical buttons, shown wherever a button appears.
-# Version 1 kept pins and hats per view; normalize_layout converts it.
-SCHEMATICS = ("evo-ot-side", "evo-scg-head", "evo-scg-side", "evo-base-front", "grip-front", "grip-back", "base")
+# Drawings ending in "-l" are the mirrored (left-hand) versions of the EVO drawings.
+# Version 1 kept pins and hats per view; version 2 was one DEVICE at the top level (the
+# stick role's). normalize_layout converts both.
+EVO = ("evo-ot-side", "evo-scg-head", "evo-scg-side", "evo-base-front")
+SCHEMATICS = (*EVO, *(s + "-l" for s in EVO), "grip-front", "grip-back", "base")
 CLUSTER_DIRS = ("up", "right", "down", "left", "center")
-DEFAULT_LAYOUT = {"version": 2, "views": [
-    {"id": "stick", "name": "Whole stick", "schematic": "evo-ot-side", "image": None},
-    {"id": "head", "name": "Grip head", "schematic": "evo-scg-head", "image": None},
-    {"id": "side", "name": "Triggers", "schematic": "evo-scg-side", "image": None},
-    {"id": "base", "name": "Base front", "schematic": "evo-base-front", "image": None}],
-    "hats": [], "pins": {}, "names": {}}
+
+
+def default_device_layout(role):
+    l = "-l" if role == "throttle" else ""
+    return {"views": [
+        {"id": "stick", "name": "Whole stick", "schematic": "evo-ot-side" + l, "image": None},
+        {"id": "head", "name": "Grip head", "schematic": "evo-scg-head" + l, "image": None},
+        {"id": "side", "name": "Triggers", "schematic": "evo-scg-side" + l, "image": None},
+        {"id": "base", "name": "Base front", "schematic": "evo-base-front" + l, "image": None}],
+        "hats": [], "pins": {}, "names": {}}
+
+
+DEFAULT_LAYOUT = {"version": 3, "devices": {r: default_device_layout(r) for r in ROLES}}
 IMAGE_TYPES = {b"\x89PNG\r\n\x1a\n": "png", b"\xff\xd8\xff": "jpg"}
 IMAGE_MAX = 10 << 20
 IMAGE_NAME = re.compile(r"^[a-z0-9_-]{1,24}-[0-9a-f]{8}\.(png|jpg|webp)$")
@@ -130,6 +146,33 @@ def _migrate_v1(lay, views):
 
 
 def normalize_layout(lay):
+    """Validate a whole layout (version 3: one section per role); older versions become the stick's."""
+    if not isinstance(lay, dict):
+        raise ValueError("layout must be an object")
+    if lay.get("version", 1) < 3 and "devices" not in lay:
+        return {"version": 3, "devices": {"stick": normalize_device_layout(lay, lay.get("version", 1) < 2),
+                                          "throttle": default_device_layout("throttle")}}
+    devs = lay.get("devices")
+    if not isinstance(devs, dict) or not set(devs) <= set(ROLES):
+        raise ValueError("layout 'devices' must be an object with stick / throttle sections")
+    out = {}
+    for r in ROLES:
+        try:
+            out[r] = normalize_device_layout(devs[r]) if r in devs else default_device_layout(r)
+        except ValueError as e:
+            raise ValueError(f"{r}: {e}") from None
+    names = [v["image"] for d in out.values() for v in d["views"] if v["image"]]
+    if len(names) != len(set(names)):
+        raise ValueError("a photo can belong to one view only")
+    return {"version": 3, "devices": out}
+
+
+def layout_images(lay):
+    return {v["image"] for d in lay["devices"].values() for v in d["views"] if v["image"]}
+
+
+def normalize_device_layout(lay, v1=False):
+    """One role's section (or a whole version 1/2 layout; v1=True converts version 1)."""
     if not isinstance(lay, dict) or not isinstance(lay.get("views"), list) or not lay["views"]:
         raise ValueError("layout needs a non-empty 'views' list")
     if len(lay["views"]) > 8:
@@ -146,7 +189,7 @@ def normalize_layout(lay):
         ids.add(v["id"])
         views.append({"id": v["id"], "name": name, "schematic": sch, "image": img})
 
-    if lay.get("version", 1) < 2 or "clusters" in lay:
+    if v1 or "clusters" in lay:
         raw_pins, raw_hats = _migrate_v1(lay, views)
     else:
         raw_pins, raw_hats = lay.get("pins") or {}, lay.get("hats") or []
@@ -204,7 +247,7 @@ def normalize_layout(lay):
         name = str(name).strip()[:32]
         if name:
             names[str(int(key))] = name
-    return {"version": 2, "views": views, "hats": hats, "pins": pins, "names": names}
+    return {"views": views, "hats": hats, "pins": pins, "names": names}
 
 
 def write_json(path, obj):
@@ -350,25 +393,27 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/image":
             return self._upload_image()
-        if path != "/api/pulse":
-            return self._send(404, {"error": "not found"})
         try:
-            n = int(self._body().get("button"))
-            with socket.socket(socket.AF_UNIX) as s:
-                s.settimeout(1)
-                s.connect(CTL)
-                # wait for the daemon's hello so it has accepted us before we send and hang up
-                buf = b""
-                while b"\n" not in buf:
-                    chunk = s.recv(65536)
-                    if not chunk:
-                        raise OSError("daemon closed the connection")
-                    buf += chunk
-                s.sendall(json.dumps({"cmd": "pulse", "button": n}).encode() + b"\n")
-                time.sleep(0.05)
-            self._send(200, {"ok": True})
-        except (OSError, ValueError, TypeError, AttributeError) as e:
-            self._send(503, {"error": f"daemon not reachable: {e}"})
+            body = self._body()
+            if not isinstance(body, dict):
+                raise TypeError("expected an object")
+            role = body.get("role", "stick")
+            if role not in ROLES:
+                return self._send(400, {"error": "unknown role"})
+            if path == "/api/pulse":
+                daemon_command({"cmd": "pulse", "role": role, "button": int(body.get("button"))})
+                return self._send(200, {"ok": True})
+            if path == "/api/select":
+                dev = body.get("device")
+                if dev is not None and not isinstance(dev, str):
+                    return self._send(400, {"error": "device must be a selector or null"})
+                r = daemon_command({"cmd": "select", "role": role, "device": dev}, want_result=True)
+                return self._send(200 if r["ok"] else 400, {"ok": r["ok"], "error": r.get("error")})
+        except (ValueError, TypeError) as e:
+            return self._send(400, {"error": str(e)})
+        except OSError as e:
+            return self._send(503, {"error": f"daemon not reachable: {e}"})
+        self._send(404, {"error": "not found"})
 
     def _put_layout(self):
         try:
@@ -378,16 +423,19 @@ class Handler(BaseHTTPRequestHandler):
         with State.lock:
             write_json(State.layout_path(), lay)
             # remove pictures no view references any more
-            used = {v["image"] for v in lay["views"] if v["image"]}
+            used = layout_images(lay)
             for f in os.listdir(State.image_dir()) if os.path.isdir(State.image_dir()) else []:
                 if IMAGE_NAME.match(f) and f not in used:
                     os.unlink(os.path.join(State.image_dir(), f))
         self._send(200, {"layout": lay})
 
     def _upload_image(self):
-        """Raw image body; ?view=<id>. Returns the stored file name (the client then saves the layout)."""
+        """Raw image body; ?view=<id>&role=<role>. Returns the stored file name (the client then saves the layout)."""
         q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         view = q.get("view", [""])[0]
+        role = q.get("role", ["stick"])[0]
+        if role not in ROLES:
+            return self._send(400, {"error": "unknown role"})
         n = int(self.headers.get("Content-Length") or 0)
         if not VIEW_ID.match(view):
             return self._send(400, {"error": "bad view id"})
@@ -397,7 +445,7 @@ class Handler(BaseHTTPRequestHandler):
         ext = image_kind(data)
         if not ext:
             return self._send(415, {"error": "only PNG, JPEG or WebP images"})
-        name = f"{view}-{secrets.token_hex(4)}.{ext}"
+        name = f"{'t-' if role == 'throttle' else ''}{view}"[:24] + f"-{secrets.token_hex(4)}.{ext}"
         os.makedirs(State.image_dir(), exist_ok=True)
         with open(os.path.join(State.image_dir(), name), "wb") as f:
             f.write(data)
@@ -451,6 +499,68 @@ class Handler(BaseHTTPRequestHandler):
                 State.last_seen = time.monotonic()
 
 
+def daemon_command(cmd, want_result=False, timeout=5):
+    """Send one command to the daemon. With want_result, wait for its {"t":"result"} reply."""
+    with socket.socket(socket.AF_UNIX) as s:
+        s.settimeout(timeout)
+        s.connect(CTL)
+        f = s.makefile("rb")
+        # wait for the daemon's hello so it has accepted us before we send and hang up
+        hello = json.loads(f.readline() or b"null")
+        if not isinstance(hello, dict):
+            raise OSError("daemon closed the connection")
+        s.sendall(json.dumps(cmd).encode() + b"\n")
+        if not want_result:
+            time.sleep(0.05)
+            return hello
+        for line in f:
+            m = json.loads(line)
+            if m.get("t") == "result":
+                return m
+        raise OSError("daemon closed the connection")
+
+
+def daemon_hello():
+    with socket.socket(socket.AF_UNIX) as s:
+        s.settimeout(3)
+        s.connect(CTL)
+        return json.loads(s.makefile("rb").readline())
+
+
+def print_status():
+    h = daemon_hello()
+    if "roles" not in h:
+        sys.exit("the running daemon is an older version; reinstall vkb-hotas (sudo ./install.sh)")
+    for r in ROLES:
+        info = h["roles"][r]
+        dev = info["device"]
+        src = f"{dev['name']} ({dev['id']})" if dev else ("not connected" if info["selector"] is not None else "none")
+        if info["selector"] is None:
+            state = "not used"
+        elif info["exposed"]:
+            state = "EXPOSED: games see the real stick"
+        else:
+            state = f"games see a {info['emulated']['name']}" if info["emulated"]["active"] else "waiting for the stick"
+        print(f"{r:9} {src}\n          {state}")
+    others = [d for d in h["devices"] if not d["role"]]
+    if others:
+        print("other sticks: " + ", ".join(f"{d['name']} ({d['selector']})" for d in others))
+
+
+def cli_expose(role, on):
+    try:
+        r = daemon_command({"cmd": "expose", "role": role, "on": on}, want_result=True)
+    except PermissionError:
+        sys.exit("no access to the vkb-hotas daemon: VKB_HOTAS_USER in /etc/default/vkb-hotas must be you")
+    except OSError as e:
+        sys.exit(f"vkb-hotas daemon not reachable ({e}); is the service running?")
+    if not r["ok"]:
+        sys.exit(f"vkb-hotas: {r['error']}")
+    print_status()
+    if on:
+        print("Games started from now on see the real stick; restart a running game to pick it up.")
+
+
 def url_file():
     """Single-instance file, keyed by mapping file + daemon socket so test instances
     (--mapping / VKB_HOTAS_CTL) never hand over to the real one."""
@@ -481,7 +591,25 @@ def main():
     ap.add_argument("--no-browser", action="store_true", help="just print the URL")
     ap.add_argument("--mapping", help="mapping file to edit (default: ~/.config/vkb-hotas/mapping.json, "
                                       "which is what the daemon reads)")
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument("--expose", choices=(*ROLES, "all"), metavar="ROLE",
+                   help="give the real stick of a role (stick, throttle or all) to games untouched; "
+                        "its virtual device is removed. Remembered across restarts")
+    g.add_argument("--hide", choices=(*ROLES, "all"), metavar="ROLE",
+                   help="undo --expose: hide the real stick again and emulate the Thrustmaster device")
+    g.add_argument("--status", action="store_true", help="show which stick feeds which role, and exit")
     args = ap.parse_args()
+    if args.status or args.expose or args.hide:
+        try:
+            if args.status:
+                print_status()
+            else:
+                cli_expose(args.expose or args.hide, bool(args.expose))
+        except PermissionError:
+            sys.exit("no access to the vkb-hotas daemon: VKB_HOTAS_USER in /etc/default/vkb-hotas must be you")
+        except (OSError, ValueError) as e:
+            sys.exit(f"vkb-hotas daemon not reachable ({e}); is the service running?")
+        return
     if args.mapping:
         State.path = os.path.abspath(args.mapping)
 
