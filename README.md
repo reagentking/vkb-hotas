@@ -123,6 +123,9 @@ Throttle); each tab has its own panels:
   **Devices** for the same choices with each role's status. Choose which connected stick feeds the
   T.16000M and which (or none) feeds the TWCS Throttle. Picking the stick the other role uses swaps
   them. The choice takes effect at once and is saved for the service.
+- **What games see:** each tab shows a **VIRTUAL** or **REAL** badge, and the **Games see:
+  Virtual | Real stick** switch at the top of the stick panel (also in **Devices**) flips it,
+  the same as `vkb-mapper --expose/--hide` (see [Everyday use](#everyday-use)).
 - **Your stick:** live axes, hat and every physical button. Pressed buttons light up, and
   each one is tagged with the emulated control it drives (on either device).
 - **What the game sees:** the emulated device's buttons, hat directions and axes.
@@ -236,7 +239,7 @@ throttle), plus button numbers above 16.
   again if none of your configured sticks is there. Sticks unplugged while it runs are
   picked up again when plugged back in; the virtual device stays put meanwhile.
 - **Give games the real stick** (for VKBDevCfg, or games that support it natively)
-  without stopping the service:
+  without stopping the service: flip **Games see** to **Real stick** in HOTAS Mapper, or
 
   ```bash
   vkb-mapper --expose stick         # or throttle, or all

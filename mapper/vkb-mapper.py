@@ -46,7 +46,7 @@ CTL = os.environ.get("VKB_HOTAS_CTL", "/run/vkb-hotas/ctl.sock")
 PAGE = os.path.join(HERE, "vkb-mapper.html")
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "vkb-mapper")
 IDLE_EXIT = 45  # seconds without any open UI before the server quits
-API_VERSION = 6  # bump when the page needs server features; the page refuses to save anything on a mismatch
+API_VERSION = 7  # bump when the page needs server features; the page refuses to save anything on a mismatch
 
 
 def initial_mapping():
@@ -403,6 +403,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/pulse":
                 daemon_command({"cmd": "pulse", "role": role, "button": int(body.get("button"))})
                 return self._send(200, {"ok": True})
+            if path == "/api/expose":
+                r = daemon_command({"cmd": "expose", "role": role, "on": bool(body.get("on"))}, want_result=True)
+                return self._send(200 if r["ok"] else 400, {"ok": r["ok"], "error": r.get("error")})
             if path == "/api/select":
                 dev = body.get("device")
                 if dev is not None and not isinstance(dev, str):

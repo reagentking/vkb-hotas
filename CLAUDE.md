@@ -193,8 +193,9 @@ virtual device is destroyed and re-created when its `button_count` changes the H
 - Sticks are chosen in the installer *and* live in HOTAS Mapper's Devices panel; the root daemon
   accepting a "select" from the socket owner was accepted as the cost.
 - Cross-mapping is allowed: any source on either stick can feed either device.
-- Exposing is CLI only (`vkb-mapper --expose/--hide`, no GUI toggle), removes the virtual device,
-  and persists across restarts.
+- Exposing removes the virtual device and persists across restarts. It started CLI only
+  (`vkb-mapper --expose/--hide`); the user later asked for it in the GUI too: a VIRTUAL/REAL badge
+  per tab and a "Games see: Virtual | Real stick" switch (stick panel and Devices dialog).
 
 **Shared model (`common/vkb_common.py`).** Owns config reading/writing (`/etc/default/vkb-hotas`:
 `VKB_HOTAS_DEVICE`, `VKB_HOTAS_THROTTLE`, `VKB_HOTAS_EXPOSE`, `VKB_HOTAS_USER`, `VKB_HOTAS_ARGS`),
@@ -243,7 +244,8 @@ guards, and keeps them:
 - `PUT /api/mapping` validates via `vkb_common` and writes atomically.
 - `GET|PUT /api/layout`, `POST /api/image?view=ID&role=R` (raw body), and `GET /api/image/<name>`
   (token in the query, so `<img>` works) back the stick map.
-- `POST /api/pulse {role, button}` and `POST /api/select {role, device}` relay to the daemon
+- `POST /api/pulse {role, button}`, `POST /api/select {role, device}` and
+  `POST /api/expose {role, on}` relay to the daemon
   (`daemon_command`, which reads `hello` first). `--status` / `--expose` / `--hide` are the same
   relay from the command line.
 - **The page is role-tabbed:** the header's role tabs switch both panels (that role's real stick on
@@ -265,6 +267,7 @@ guards, and keeps them:
   6 = roles (mapping v2 with stick/throttle sections and cross sources, layout v3 per role, `-l`
   drawings, `/api/select`). Since 6 a mismatch makes the page read-only (`readOnly`: no mapping or
   layout saves at all), not just the stick map, because an old server would drop the throttle data.
+  7 = `/api/expose` (the "Games see" switch).
 - The page is one self-contained file (CSP forbids external resources). Physical inputs are amber
   and emulated/game outputs are cyan.
 - **Stick map:** layout and photos are owned by the mapper server alone; the daemon never reads them.

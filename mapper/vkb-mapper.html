@@ -60,6 +60,13 @@ header{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:14px 24px
 #devMenu small{margin-left:auto;font:11px var(--mono);color:var(--muted);white-space:nowrap}
 #devMenu .sep{height:1px;background:var(--line);margin:4px 2px}
 .roletab .exp{font:700 9px var(--mono);letter-spacing:.1em;color:#1b1205;background:var(--amber);border-radius:3px;padding:1px 4px}
+.roletab .virt{font:700 9px var(--mono);letter-spacing:.1em;color:var(--cyan);border:1px solid rgba(70,229,255,.45);border-radius:3px;padding:0 4px}
+.gsee{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}
+.gsee[hidden]{display:none}
+.gsee label{font:600 11px var(--mono);letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+.gsee .seg button.on.real{background:var(--amber-d);color:var(--amber)}
+.gsee .seg button:disabled{opacity:.5;cursor:wait}
+.gsee .hint{font-size:12px}
 .banner{margin:0 0 14px;padding:9px 12px;border:1px solid rgba(255,181,71,.45);border-radius:5px;background:var(--amber-d);color:var(--amber);font-size:12.5px}
 .banner[hidden]{display:none}
 .banner code{font:12px var(--mono);color:var(--text)}
@@ -292,6 +299,7 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
   <section class="panel phys">
     <h2 id="physTitle">Your stick</h2>
     <p class="sub">Live input from the physical device. Lit tiles are pressed; the cyan tag shows which emulated control each button drives.</p>
+    <div class="gsee" id="gsee" hidden></div>
     <div class="banner" id="physBanner" hidden></div>
     <h3>Stick map</h3>
     <div class="maptools">
@@ -587,7 +595,11 @@ function renderRoleTabs() {
     pd.onclick = e => { e.stopPropagation(); openDevMenu(r, pd); };
     const ed = el("span", "dev emu", info?.emulated?.name || ROLE_INFO[r].emu);
     b.append(pd, el("span", "arrow"), ed);
-    if (info?.exposed) { const x = el("span", "exp", "EXPOSED"); x.title = "Games see the real stick; the emulated device is removed"; b.append(x); }
+    if (info?.selector != null) {  // what games see for this role
+      const x = info.exposed ? el("span", "exp", "REAL") : el("span", "virt", "VIRTUAL");
+      x.title = info.exposed ? "Games see the real stick; the emulated device is removed" : `Games see the virtual ${ROLE_INFO[r].emuShort}; the real stick is hidden`;
+      b.append(x);
+    }
     b.title = `Edit the ${ROLE_INFO[r].emuShort} mapping`;
     b.onclick = () => setRole(r); box.append(b);
   }
@@ -598,10 +610,12 @@ function renderBanners() {
   $("#emuTitle").textContent = `What the game sees · ${L.emuShort}`;
   $("#emuSub").textContent = `The emulated ${L.emu}.`;
   pb.hidden = eb.hidden = true; pb.textContent = eb.textContent = "";
+  const gs = $("#gsee"); gs.replaceChildren(); gs.hidden = true;
   if (!info) return;
+  if (info.selector != null) { gs.replaceChildren(...exposeSwitch(role).childNodes); gs.hidden = false; }
   const code = t => { const c = el("code", null, t); return c; };
   if (info.selector == null) { pb.append(`No real stick feeds the ${L.emuShort}. Pick one in `, el("b", null, "Devices"), " (you can still prepare its mapping)."); pb.hidden = false; }
-  else if (info.exposed) { pb.append("Exposed: games see this real stick as it is, and the emulated ", L.emuShort, " is removed. To emulate it again run ", code(`vkb-mapper --hide ${role}`), "."); pb.hidden = false; }
+  else if (info.exposed) { pb.append("Games see this real stick as it is, and the emulated ", L.emuShort, " is removed. Switch back with ", el("b", null, `Virtual ${L.emuShort}`), " above (or ", code(`vkb-mapper --hide ${role}`), ")."); pb.hidden = false; }
   else if (!info.device) { pb.append(`Not connected (${info.selector || "any VKB stick"}). Plug it in; it's picked up automatically.`); pb.hidden = false; }
   if (!info.emulated?.active && info.selector != null) { eb.append(`Games don't see a ${L.emuShort} right now. Changes are saved and apply once it's active.`); eb.hidden = false; }
 }
@@ -624,11 +638,37 @@ function renderDevices() {
     box.append(sel);
     const st = el("div", "st");
     if (info.selector == null) st.append("Not used.");
-    else if (info.exposed) st.append("Exposed: games see the real stick. Undo with ", el("code", null, `vkb-mapper --hide ${r}`));
-    else st.append(`Hidden from games and emulated as the ${L.emuShort}. To give games the real stick instead: `, el("code", null, `vkb-mapper --expose ${r}`));
+    else {
+      const sw = exposeSwitch(r); sw.style.margin = "0";
+      st.append(sw);
+      st.append(el("div", null, "")); st.lastChild.append("Also from a terminal: ", el("code", null, `vkb-mapper --${info.exposed ? "hide" : "expose"} ${r}`));
+    }
     box.append(st); body.append(box);
   }
   body.append(el("p", "hint", "The choice is saved for the service. Sticks with identical ids are told apart by USB port (the part after @)."));
+}
+// "Games see: virtual | real" switch for a role (the daemon's expose command)
+function exposeSwitch(r) {
+  const info = hello?.roles?.[r], L = ROLE_INFO[r], box = el("div", "gsee");
+  box.append(el("label", null, "Games see"));
+  const seg = el("div", "seg");
+  for (const [on, text] of [[false, `Virtual ${L.emuShort}`], [true, "Real stick"]]) {
+    const b = el("button", (!!info?.exposed === on ? "on" : "") + (on ? " real" : ""), text);
+    b.title = on ? "Give games the real stick as it is: not grabbed or hidden; the virtual device is removed"
+                 : `Hide the real stick and give games the virtual ${L.emu}`;
+    b.onclick = () => { if (!!info?.exposed !== on) setExposed(r, on, seg); };
+    seg.append(b);
+  }
+  box.append(seg, el("span", "hint", "Restart a running game to pick up a change."));
+  return box;
+}
+async function setExposed(r, on, seg) {
+  const L = ROLE_INFO[r];
+  if (seg) for (const b of seg.children) b.disabled = true;
+  try {
+    await api("POST", "/api/expose", {role: r, on});
+    toast(on ? `${L.label}: games now see the real stick` : `${L.label}: games now see the virtual ${L.emuShort}`);
+  } catch (e) { toast("Not changed: " + e.message, true); if (seg) for (const b of seg.children) b.disabled = false; }
 }
 async function selectDevice(r, device, label) {
   const L = ROLE_INFO[r];
@@ -1303,7 +1343,7 @@ function connect() {
   try {
     const [r, l] = await Promise.all([api("GET", "/api/mapping"), api("GET", "/api/layout")]);
     mapping = r.mapping;
-    if (l.api !== 6) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
+    if (l.api !== 7) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
       readOnly = true; layoutAll = layout = null;
       for (const [k, p] of Object.entries(mapping.profiles)) if (!p.stick) mapping.profiles[k] = {stick: p, throttle: freshRole("throttle")};
       for (const sel of [".maptools", ".stage"]) document.querySelector(sel).hidden = true;
