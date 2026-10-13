@@ -48,7 +48,7 @@ CTL = os.environ.get("VKB_HOTAS_CTL", "/run/vkb-hotas/ctl.sock")
 PAGE = os.path.join(HERE, "vkb-mapper.html")
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "vkb-mapper")
 IDLE_EXIT = 45  # seconds without any open UI before the server quits
-API_VERSION = 11  # bump when the page needs server features; the page refuses to save anything on a mismatch
+API_VERSION = 12  # bump when the page needs server features; the page refuses to save anything on a mismatch
 
 
 def initial_mapping():
@@ -89,7 +89,7 @@ def initial_mapping():
 # Drawings ending in "-l" are the mirrored (left-hand) versions of the EVO drawings.
 # Version 1 kept pins and hats per view; version 2 was one DEVICE at the top level (the
 # stick role's). normalize_layout converts both.
-EVO = ("evo-ot-side", "evo-scg-head", "evo-scg-side", "evo-base-front")
+EVO = ("evo-ot-side", "evo-ot-straight", "evo-scg-head", "evo-scg-side", "evo-base-front")
 SCHEMATICS = (*EVO, *(s + "-l" for s in EVO), "grip-front", "grip-back", "base")
 CLUSTER_DIRS = ("up", "right", "down", "left", "center")
 

@@ -143,8 +143,9 @@ Throttle); each tab has its own panels:
   × to remove). Zoom with the mouse wheel or the −/+ buttons (up to 8×) and drag to pan; pins
   keep their size on screen, so small hats are easy to hit, and **FIT** shows the whole picture.
   The default views are drawings of the Gladiator NXT EVO Omni Throttle (whole stick, SCG grip
-  head, triggers in side profile, base front), mirrored for the throttle stick; generic outlines
-  are available for other sticks. Each real stick has its own stick map.
+  head, triggers in side profile, base front), mirrored for the throttle stick. A **Straight
+  stick** drawing (same grip, no Omni Throttle angle) is available for each hand, and generic
+  outlines for other sticks. Each real stick has its own stick map.
   **Pins belong to the picture**: each drawing and each photo keeps its own pins, so changing a
   view's drawing shows that drawing's pins and changing back restores the old ones. Add your own
   views, and swap any drawing for a photo of your stick with **Photo…** (PNG/JPEG/WebP, up to

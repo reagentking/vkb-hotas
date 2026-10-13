@@ -307,7 +307,7 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
       <button class="btn small" id="placeBtn" title="Press a button on your stick, then click where it is">Place pins</button>
       <button class="btn small" id="hatAddBtn" title="Set up a 4-way hat with center push (it reports as 5 buttons)">+ 5-way hat</button>
       <button class="btn small" id="photoBtn" title="Use a photo of your stick for this view">Photo…</button>
-      <select id="schemSel" title="Drawing for this view (each drawing keeps its own pins)"><optgroup label="VKB Gladiator NXT EVO"><option value="evo-ot-side">Omni Throttle (whole)</option><option value="evo-scg-head">SCG grip head</option><option value="evo-scg-side">SCG grip side (triggers)</option><option value="evo-base-front">EVO base (front)</option></optgroup><optgroup label="VKB Gladiator NXT EVO, left hand"><option value="evo-ot-side-l">Omni Throttle L (whole)</option><option value="evo-scg-head-l">SCG grip head L</option><option value="evo-scg-side-l">SCG grip side L (triggers)</option><option value="evo-base-front-l">EVO base L (front)</option></optgroup><optgroup label="Generic"><option value="grip-front">Grip (front)</option><option value="grip-back">Grip (side)</option><option value="base">Base</option></optgroup></select>
+      <select id="schemSel" title="Drawing for this view (each drawing keeps its own pins)"><optgroup label="VKB Gladiator NXT EVO"><option value="evo-ot-side">Omni Throttle (whole)</option><option value="evo-ot-straight">Straight stick (whole)</option><option value="evo-scg-head">SCG grip head</option><option value="evo-scg-side">SCG grip side (triggers)</option><option value="evo-base-front">EVO base (front)</option></optgroup><optgroup label="VKB Gladiator NXT EVO, left hand"><option value="evo-ot-side-l">Omni Throttle L (whole)</option><option value="evo-ot-straight-l">Straight stick L (whole)</option><option value="evo-scg-head-l">SCG grip head L</option><option value="evo-scg-side-l">SCG grip side L (triggers)</option><option value="evo-base-front-l">EVO base L (front)</option></optgroup><optgroup label="Generic"><option value="grip-front">Grip (front)</option><option value="grip-back">Grip (side)</option><option value="base">Base</option></optgroup></select>
       <button class="btn small" id="schemBtn" title="Remove the photo and use the drawing">Use drawing</button>
       <span class="spacer"></span>
       <button class="btn small" id="viewAdd">+ View</button>
@@ -969,6 +969,13 @@ const SCHEM = {
     <rect x="322" y="196" width="34" height="22" rx="5" fill="#16222e" stroke="#33465c" stroke-width="2"/>
     <circle cx="110" cy="345" r="9" fill="none" stroke="#26364a" stroke-width="1.5"/><circle cx="140" cy="356" r="9" fill="none" stroke="#26364a" stroke-width="1.5"/></svg>`,
 };
+// Straight stick: the same base and grip without the OTA bracket and tilt, the grip standing on a
+// shorter mast. Built from the angled drawing so grip fixes apply to both. Mirroring about x = 200
+// equals flipping the grip's own x, so "translate(200 300) scale(-1 1)" keeps it right-handed.
+SCHEM["evo-ot-straight"] = SCHEM["evo-ot-side"]
+  .replace('<rect x="186" y="270" width="28" height="70"', '<rect x="186" y="300" width="28" height="40"')
+  .replace(/<!-- OTA bracket[\s\S]*?<g transform="translate\(135 238\) rotate\(38\)">/,
+           '<!-- straight right-hand SCG grip; the "-l" drawing mirrors it -->\n    <g>\n    <g transform="translate(200 300) scale(-1 1)">');
 const curView = () => layout.views.find(v => v.id === viewId) || layout.views[0];
 const ownRaw = m => rawOf(m) || {b: [], h: [0, 0], a: {}};
 // pins are anchored to the picture (drawing or photo), not the view: switching a view's drawing
@@ -1349,7 +1356,7 @@ function connect() {
   try {
     const [r, l] = await Promise.all([api("GET", "/api/mapping"), api("GET", "/api/layout")]);
     mapping = r.mapping;
-    if (l.api !== 11) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
+    if (l.api !== 12) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
       readOnly = true; layoutAll = layout = null;
       for (const [k, p] of Object.entries(mapping.profiles)) if (!p.stick) mapping.profiles[k] = {stick: p, throttle: freshRole("throttle")};
       for (const sel of [".maptools", ".stage"]) document.querySelector(sel).hidden = true;

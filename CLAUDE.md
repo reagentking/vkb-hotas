@@ -271,7 +271,8 @@ guards, and keeps them:
   pins converted; a stale server would save unconverted pins that then get converted twice);
   9 = layout format 5 (SCG grip head drawing mirrored to a right-hand grip, pins mirrored);
   10 = layout format 6 (whole-stick grip fully mirrored, red button on the correct side);
-  11 = layout format 7 (whole-stick thumb-side bump moved to the other side of the grip).
+  11 = layout format 7 (whole-stick thumb-side bump moved to the other side of the grip);
+  12 = `evo-ot-straight(-l)` drawings (an older server would replace unknown drawings on save).
 - The page is one self-contained file (CSP forbids external resources). Physical inputs are amber
   and emulated/game outputs are cyan.
 - **Stick map:** layout and photos are owned by the mapper server alone; the daemon never reads them.
@@ -341,6 +342,9 @@ guards, and keeps them:
     - `evo-*-l` are the same drawings mirrored (CSS `scaleX(-1)`), the throttle role's defaults
       for a left-hand OT. They are separate picture keys, so their pins are separate too.
       `renderMap` uses an exact `SCHEM[name]` if one exists, else the base drawing mirrored.
+    - `evo-ot-straight` is the whole stick without the OTA bracket and tilt (the user asked for it):
+      the page builds it from `evo-ot-side` by string replacement (shorter mast, grip group at
+      `translate(200 300) scale(-1 1)`), so grip fixes apply to both. Not a default view.
     - `grip-front` / `grip-back` / `base` are generic outlines for other sticks.
     - Pins are always placed by the user, never pre-filled, because button numbering differs per
       grip and firmware.
