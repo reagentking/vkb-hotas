@@ -180,7 +180,10 @@ After updating (re-running `sudo ./install.sh`), close HOTAS Mapper and reopen i
 has exited. An older mapper still running would serve the new page, so the page detects
 that and saves nothing until you restart. Mappings and stick maps from before the
 two-stick update are converted on load: they become the Stick's, and the Throttle starts
-from defaults. Stick maps keep their views and drawings: pick a new drawing per view from the
+from defaults. The Omni Throttle and SCG grip head drawings were corrected (the right-hand ones were drawn
+the left-hand way, and vice versa: tilt, red button, thumb-stick bump); pins already placed on
+them are moved along with them, and
+the old `layout.json` is kept as `layout.json.bak-v<old version>`. Stick maps keep their views and drawings: pick a new drawing per view from the
 dropdown next to **Photo…**, or add a view with **+ View** (e.g. one using "SCG grip side
 (triggers)").
 

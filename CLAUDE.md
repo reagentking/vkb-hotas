@@ -267,7 +267,11 @@ guards, and keeps them:
   6 = roles (mapping v2 with stick/throttle sections and cross sources, layout v3 per role, `-l`
   drawings, `/api/select`). Since 6 a mismatch makes the page read-only (`readOnly`: no mapping or
   layout saves at all), not just the stick map, because an old server would drop the throttle data.
-  7 = `/api/expose` (the "Games see" switch).
+  7 = `/api/expose` (the "Games see" switch); 8 = layout format 4 (Omni Throttle drawing fixed,
+  pins converted; a stale server would save unconverted pins that then get converted twice);
+  9 = layout format 5 (SCG grip head drawing mirrored to a right-hand grip, pins mirrored);
+  10 = layout format 6 (whole-stick grip fully mirrored, red button on the correct side);
+  11 = layout format 7 (whole-stick thumb-side bump moved to the other side of the grip).
 - The page is one self-contained file (CSP forbids external resources). Physical inputs are amber
   and emulated/game outputs are cyan.
 - **Stick map:** layout and photos are owned by the mapper server alone; the daemon never reads them.
@@ -275,6 +279,28 @@ guards, and keeps them:
   tests).
   - The layout is kept out of `mapping.json` deliberately: `normalize_mapping` drops unknown keys,
     and the layout describes hardware, not a game profile.
+  - **Format version 7:** the grip's thumb-side bump (mini-stick; path `M32 -150 …`, formerly
+    `M-30 -150 …`) sits on the other side of the grip in the base drawing, so both hands get it
+    (the user's third report, first for the left picture, then the right). Pins within 40 grip
+    units of the old bump move with it (`_move_ot_bump_pin`, a mirror about grip x = 1), applied
+    after the version-6 step, so every older file follows the drawing. Lesson: before changing a
+    drawing again, check which version the user is *looking at*
+    (`grep API_VERSION /usr/local/lib/vkb-hotas/vkb-mapper.py`); feedback can be on an install
+    that's one or two changes behind the repo.
+  - **Format version 6:** the whole-stick drawing's grip lost its inner `scale(-1 1)`: versions 4/5
+    still drew left-hand grip details there (red button on the wrong side, the user's second
+    report). The bracket+grip assembly is now simply the original mirrored as a whole. Converting
+    pins: from before 4, grip pins (above y 330 of 500) just mirror (`_mirror_ot_grip_pin`); from 4
+    or 5 they flip within the grip (`_flip_ot_grip_pin`). The original pre-4 drawing came from a
+    left-hand grip, which is why every EVO drawing needed mirroring for a right-hand OT.
+  - **Format version 5** = version 4 plus mirroring the pins of `draw:evo-scg-head` and
+    `draw:evo-scg-head-l` (`_migrate_scg_head`): the grip head used to be drawn as a left-hand SCG
+    (red button bottom-right; the user reported it); the drawing is now wrapped in a mirror group,
+    red button bottom-left. Each conversion runs only when the file's version is below its number,
+    so a v3 file gets both.
+  - **Format version 4** moved the `evo-ot-side` bracket and grip to the right-hand side (it used to
+    lean the left-hand way) but kept the grip's details unmirrored, which turned out wrong (see 6).
+    GET `/api/layout` copies an older file to `layout.json.bak-v<old>` once before converting.
   - **Format version 3:** `{"version": 3, "devices": {"stick": DEVICE, "throttle": DEVICE}}`, one
     section per role's real stick. A version 1/2 file becomes the stick's section
     (`normalize_device_layout(lay, v1=...)`; sections inside v3 must never be treated as v1, which
@@ -314,6 +340,7 @@ guards, and keeps them:
       (rapid-fire paddle above the dual-stage trigger, mini-stick), base front.
     - `evo-*-l` are the same drawings mirrored (CSS `scaleX(-1)`), the throttle role's defaults
       for a left-hand OT. They are separate picture keys, so their pins are separate too.
+      `renderMap` uses an exact `SCHEM[name]` if one exists, else the base drawing mirrored.
     - `grip-front` / `grip-back` / `base` are generic outlines for other sticks.
     - Pins are always placed by the user, never pre-filled, because button numbering differs per
       grip and firmware.

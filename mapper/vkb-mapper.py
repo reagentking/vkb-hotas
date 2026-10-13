@@ -21,10 +21,12 @@ import argparse
 import hashlib
 import hmac
 import json
+import math
 import os
 import re
 import secrets
 import shlex
+import shutil
 import signal
 import socket
 import sys
@@ -46,7 +48,7 @@ CTL = os.environ.get("VKB_HOTAS_CTL", "/run/vkb-hotas/ctl.sock")
 PAGE = os.path.join(HERE, "vkb-mapper.html")
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "vkb-mapper")
 IDLE_EXIT = 45  # seconds without any open UI before the server quits
-API_VERSION = 7  # bump when the page needs server features; the page refuses to save anything on a mismatch
+API_VERSION = 11  # bump when the page needs server features; the page refuses to save anything on a mismatch
 
 
 def initial_mapping():
@@ -70,7 +72,7 @@ def initial_mapping():
 # layout.json lives next to mapping.json. It describes the hardware, not a game, so
 # it's shared by all profiles and the daemon never reads it. One section per role
 # (the real stick behind the T.16000M, and the one behind the TWCS Throttle):
-#   {"version": 3, "devices": {"stick": DEVICE, "throttle": DEVICE}}
+#   {"version": 7, "devices": {"stick": DEVICE, "throttle": DEVICE}}
 # where DEVICE is
 #   {"views": [{"id": "stick", "name": "Whole stick", "schematic": "evo-ot-side", "image": null | "x-1a2b3c4d.jpg"}],
 #    "hats":  [{"id": "c1", "name": "Hat 2", "dirs": {"up": 11, "right": 12, "down": 13, "left": 14, "center": 15}}],
@@ -102,7 +104,7 @@ def default_device_layout(role):
         "hats": [], "pins": {}, "names": {}}
 
 
-DEFAULT_LAYOUT = {"version": 3, "devices": {r: default_device_layout(r) for r in ROLES}}
+DEFAULT_LAYOUT = {"version": 7, "devices": {r: default_device_layout(r) for r in ROLES}}
 IMAGE_TYPES = {b"\x89PNG\r\n\x1a\n": "png", b"\xff\xd8\xff": "jpg"}
 IMAGE_MAX = 10 << 20
 IMAGE_NAME = re.compile(r"^[a-z0-9_-]{1,24}-[0-9a-f]{8}\.(png|jpg|webp)$")
@@ -145,13 +147,93 @@ def _migrate_v1(lay, views):
     return pins, hats
 
 
+# The whole-stick drawing (evo-ot-side) changed twice; pins on its grip move with it, pins on the
+# base (below OT_BASE_TOP) never do:
+#  - before version 4 the bracket and grip were drawn on the left-hand side, from a left-hand grip
+#    drawing. Since version 6 that assembly is mirrored as a whole (right-hand OT, right-hand grip),
+#    so grip pins just mirror: x -> 1 - x, on the "-l" drawing too.
+#  - versions 4 and 5 mirrored the assembly but kept the grip's details unmirrored (inner
+#    scale(-1 1)), leaving the red button on the wrong side (the user reported it); converting from
+#    them flips each pin within the grip again (_flip_ot_grip_pin).
+OT_GRIP_ORIGIN, OT_GRIP_ANGLE, OT_BASE_TOP = (135, 238), math.radians(38), 330  # drawing units (400x500)
+
+
+def _mirror_ot_grip_pin(fx, fy, mirrored):
+    return [round(1 - fx, 4), fy] if fy * 500 < OT_BASE_TOP else [fx, fy]
+
+
+def _flip_ot_grip_pin(fx, fy, mirrored):
+    """p -> M(T(S(T^-1(M(p))))) for a pin on the grip (M = whole-picture mirror, S = grip-local
+    mirror, T = the grip's placement in the original drawing)."""
+    x, y = fx * 400, fy * 500
+    if y >= OT_BASE_TOP:
+        return [fx, fy]
+    if mirrored:
+        x = 400 - x
+    x = 400 - x  # undo the drawing's outer mirror
+    ox, oy = OT_GRIP_ORIGIN
+    c, s = math.cos(OT_GRIP_ANGLE), math.sin(OT_GRIP_ANGLE)
+    dx, dy = x - ox, y - oy
+    gx, gy = c * dx + s * dy, -s * dx + c * dy  # into the grip's own coordinates
+    gx = -gx
+    x, y = ox + c * gx - s * gy, oy + s * gx + c * gy
+    x = 400 - x
+    if mirrored:
+        x = 400 - x
+    return [round(min(1, max(0, x / 400)), 4), round(min(1, max(0, y / 500)), 4)]
+
+
+# Version 7 moved the grip's thumb-side bump (mini-stick) to the other side of the grip on the
+# whole-stick drawing (the user's correction); pins on it move along: a mirror within the grip about
+# local x = 1. Applied to version-6 coordinates (grip = the original assembly mirrored as a whole).
+OT_BUMP, OT_BUMP_RADIUS = (-47, -128), 40  # grip coordinates, before the move
+
+
+def _move_ot_bump_pin(fx, fy, mirrored):
+    x, y = fx * 400, fy * 500
+    if mirrored:
+        x = 400 - x
+    x = 400 - x  # undo the outer mirror: now in the original drawing's coordinates
+    ox, oy = OT_GRIP_ORIGIN
+    c, s = math.cos(OT_GRIP_ANGLE), math.sin(OT_GRIP_ANGLE)
+    dx, dy = x - ox, y - oy
+    gx, gy = c * dx + s * dy, -s * dx + c * dy
+    if math.hypot(gx - OT_BUMP[0], gy - OT_BUMP[1]) > OT_BUMP_RADIUS:
+        return [fx, fy]
+    gx = 2 - gx
+    x, y = ox + c * gx - s * gy, oy + s * gx + c * gy
+    x = 400 - x
+    if mirrored:
+        x = 400 - x
+    return [round(min(1, max(0, x / 400)), 4), round(min(1, max(0, y / 500)), 4)]
+
+
+def _migrate_ot_drawing(dev, move):
+    for key, mirrored in (("draw:evo-ot-side", False), ("draw:evo-ot-side-l", True)):
+        for k, (fx, fy) in list(dev["pins"].get(key, {}).items()):
+            dev["pins"][key][k] = move(fx, fy, mirrored)
+    return dev
+
+
+# Before layout version 5 the SCG grip head drawing was a left-hand grip (red button bottom-right);
+# version 5 mirrors it, so its pins (and those of its "-l" mirror) are mirrored too.
+def _migrate_scg_head(dev):
+    for key in ("draw:evo-scg-head", "draw:evo-scg-head-l"):
+        for k, (fx, fy) in list(dev["pins"].get(key, {}).items()):
+            dev["pins"][key][k] = [round(1 - fx, 4), fy]
+    return dev
+
+
 def normalize_layout(lay):
-    """Validate a whole layout (version 3: one section per role); older versions become the stick's."""
+    """Validate a whole layout (version 7: one section per role); older versions are converted:
+    versions 1/2 become the stick's section, whole-stick grip pins move with the grip (before 6)
+    and with its thumb-side bump (before 7), and SCG grip head pins are mirrored (before 5)."""
     if not isinstance(lay, dict):
         raise ValueError("layout must be an object")
-    if lay.get("version", 1) < 3 and "devices" not in lay:
-        return {"version": 3, "devices": {"stick": normalize_device_layout(lay, lay.get("version", 1) < 2),
-                                          "throttle": default_device_layout("throttle")}}
+    old = lay.get("version", 1)
+    if old < 3 and "devices" not in lay:
+        lay = {"version": 3, "devices": {"stick": normalize_device_layout(lay, old < 2),
+                                         "throttle": default_device_layout("throttle")}}
     devs = lay.get("devices")
     if not isinstance(devs, dict) or not set(devs) <= set(ROLES):
         raise ValueError("layout 'devices' must be an object with stick / throttle sections")
@@ -164,7 +246,14 @@ def normalize_layout(lay):
     names = [v["image"] for d in out.values() for v in d["views"] if v["image"]]
     if len(names) != len(set(names)):
         raise ValueError("a photo can belong to one view only")
-    return {"version": 3, "devices": out}
+    if old < 6:
+        move = _mirror_ot_grip_pin if old < 4 else _flip_ot_grip_pin
+        out = {r: _migrate_ot_drawing(d, move) for r, d in out.items()}
+    if old < 5:
+        out = {r: _migrate_scg_head(d) for r, d in out.items()}
+    if old < 7:
+        out = {r: _migrate_ot_drawing(d, _move_ot_bump_pin) for r, d in out.items()}
+    return {"version": 7, "devices": out}
 
 
 def layout_images(lay):
@@ -248,6 +337,14 @@ def normalize_device_layout(lay, v1=False):
         if name:
             names[str(int(key))] = name
     return {"views": views, "hats": hats, "pins": pins, "names": names}
+
+
+def backup_layout(old_version):
+    """Keep the file as it was before a format conversion (once per old version)."""
+    bak = f"{State.layout_path()}.bak-v{old_version}"
+    if not os.path.exists(bak):
+        with State.lock:
+            shutil.copy2(State.layout_path(), bak)
 
 
 def write_json(path, obj):
@@ -345,8 +442,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"mapping": m, "path": State.path, "exists": exists, "error": err})
         elif path == "/api/layout":
             try:
-                lay = normalize_layout(json.load(open(State.layout_path())))
+                raw = json.load(open(State.layout_path()))
+                lay = normalize_layout(raw)
                 err = None
+                if isinstance(raw, dict) and raw.get("version", 1) < lay["version"]:
+                    backup_layout(raw.get("version", 1))
             except FileNotFoundError:
                 lay, err = DEFAULT_LAYOUT, None
             except (OSError, ValueError) as e:

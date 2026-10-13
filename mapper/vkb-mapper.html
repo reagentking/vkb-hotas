@@ -884,19 +884,25 @@ const SCHEM = {
     <rect x="228" y="360" width="26" height="12" rx="4" fill="#111b25" stroke="#3a5068" stroke-width="1.5"/>
     <ellipse cx="200" cy="340" rx="40" ry="9" fill="#0d151d" stroke="#33465c" stroke-width="2"/>
     <rect x="186" y="270" width="28" height="70" rx="3" fill="url(#otB)" stroke="#33465c" stroke-width="2"/>
+    <!-- OTA bracket and right-hand SCG grip (red button on the left of the head, as on the
+         grip-head drawing): the original left-hand assembly mirrored as a whole. The "-l" drawing
+         mirrors it back for a left-hand OT. -->
+    <g transform="translate(400 0) scale(-1 1)">
     <path d="M214 258 L214 288 L118 288 L118 232 L152 232 L152 258 Z" fill="#141f2a" stroke="#33465c" stroke-width="2"/>
     <g transform="translate(135 238) rotate(38)">
       <rect x="-40" y="-14" width="78" height="18" rx="5" fill="#111b25" stroke="#33465c" stroke-width="2"/>
       <path d="M-34 -12 L-30 -168 Q-29 -186 -12 -190 L20 -190 Q36 -186 36 -168 L32 -12 Z" fill="url(#otB)" stroke="#33465c" stroke-width="2"/>
-      <path d="M-30 -150 Q-62 -148 -64 -120 Q-62 -106 -30 -110" fill="#111b25" stroke="#33465c" stroke-width="2"/>
+      <path d="M32 -150 Q64 -148 66 -120 Q64 -106 32 -110" fill="#111b25" stroke="#33465c" stroke-width="2"/>
       <path d="M-42 -184 Q-50 -270 4 -284 Q60 -292 66 -238 Q70 -202 42 -184 Z" fill="url(#otA)" stroke="#33465c" stroke-width="2"/>
       <circle cx="-14" cy="-250" r="12" fill="none" stroke="#3a5068" stroke-width="1.5" stroke-dasharray="3 3"/>
       <circle cx="28" cy="-252" r="12" fill="none" stroke="#3a5068" stroke-width="1.5" stroke-dasharray="3 3"/>
       <circle cx="8" cy="-216" r="11" fill="none" stroke="#3a5068" stroke-width="1.5" stroke-dasharray="3 3"/>
       <circle cx="44" cy="-212" r="6" fill="#3a1c1f" stroke="#b5474f" stroke-width="1.5"/>
-    </g></svg>`,
+    </g></g></svg>`,
   "evo-scg-head": `<svg viewBox="0 0 400 500" aria-hidden="true">
     <defs><linearGradient id="hd" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1a2733"/><stop offset="1" stop-color="#0c131b"/></linearGradient></defs>
+    <!-- right-hand SCG: red button bottom-left (the "-l" drawing mirrors it back) -->
+    <g transform="translate(400 0) scale(-1 1)">
     <path d="M84 160 Q72 58 176 38 Q304 24 330 128 Q346 204 298 262 L282 300 Q270 390 252 480 L132 480 Q118 390 108 300 L100 262 Q80 222 84 160 Z" fill="url(#hd)" stroke="#33465c" stroke-width="2"/>
     <g fill="none" stroke="#3a5068" stroke-width="1.5">
       <circle cx="140" cy="118" r="30" stroke-dasharray="4 4"/><circle cx="140" cy="118" r="9"/>
@@ -907,7 +913,7 @@ const SCHEM = {
     </g>
     <path d="M140 84 v-8 M140 152 v8 M106 118 h-8 M174 118 h8 M262 74 v-8 M262 142 v8 M228 108 h-8 M296 108 h8 M204 162 v-8 M204 230 v8 M170 196 h-8 M238 196 h8" stroke="#26364a" stroke-width="2"/>
     <circle cx="282" cy="196" r="13" fill="#3a1c1f" stroke="#b5474f" stroke-width="1.8"/>
-    <path d="M200 320 L200 470" stroke="#1b2632" stroke-width="2"/></svg>`,
+    <path d="M200 320 L200 470" stroke="#1b2632" stroke-width="2"/></g></svg>`,
   "evo-scg-side": `<svg viewBox="0 0 400 500" aria-hidden="true">
     <defs><linearGradient id="sd" x1="0" x2="1"><stop offset="0" stop-color="#1c2a37"/><stop offset="1" stop-color="#0c131b"/></linearGradient></defs>
     <ellipse cx="212" cy="470" rx="88" ry="14" fill="none" stroke="#26364a" stroke-width="2"/>
@@ -1010,7 +1016,7 @@ function renderMap() {
   if (v.image) { const img = el("img"); img.alt = v.name; img.onload = applyZoom; img.src = `/api/image/${encodeURIComponent(v.image)}?t=${encodeURIComponent(TOKEN)}`; img.draggable = false; cv.append(img); }
   else {
     // "-l" drawings are the left-hand (mirrored) versions
-    cv.insertAdjacentHTML("beforeend", SCHEM[v.schematic.replace(/-l$/, "")] || SCHEM["evo-ot-side"]);
+    cv.insertAdjacentHTML("beforeend", SCHEM[v.schematic] || SCHEM[v.schematic.replace(/-l$/, "")] || SCHEM["evo-ot-side"]);
     if (v.schematic.endsWith("-l")) cv.querySelector("svg").style.transform = "scaleX(-1)";
   }
   $("#watermark").hidden = !!v.image;
@@ -1343,7 +1349,7 @@ function connect() {
   try {
     const [r, l] = await Promise.all([api("GET", "/api/mapping"), api("GET", "/api/layout")]);
     mapping = r.mapping;
-    if (l.api !== 7) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
+    if (l.api !== 11) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
       readOnly = true; layoutAll = layout = null;
       for (const [k, p] of Object.entries(mapping.profiles)) if (!p.stick) mapping.profiles[k] = {stick: p, throttle: freshRole("throttle")};
       for (const sel of [".maptools", ".stage"]) document.querySelector(sel).hidden = true;
