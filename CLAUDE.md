@@ -272,7 +272,9 @@ guards, and keeps them:
   9 = layout format 5 (SCG grip head drawing mirrored to a right-hand grip, pins mirrored);
   10 = layout format 6 (whole-stick grip fully mirrored, red button on the correct side);
   11 = layout format 7 (whole-stick thumb-side bump moved to the other side of the grip);
-  12 = `evo-ot-straight(-l)` drawings (an older server would replace unknown drawings on save).
+  12 = `evo-ot-straight(-l)` drawings (an older server would replace unknown drawings on save);
+  13 = game defaults (`GET /api/references`, a profile's optional `reference`);
+  14 = user game defaults (`PUT`/`DELETE /api/references/u-…`).
 - The page is one self-contained file (CSP forbids external resources). Physical inputs are amber
   and emulated/game outputs are cyan.
 - **Stick map:** layout and photos are owned by the mapper server alone; the daemon never reads them.
@@ -356,6 +358,30 @@ guards, and keeps them:
     - Zoom state is per view, for the session only.
   - **Defaults only apply to new layouts:** `DEFAULT_LAYOUT` is used only when no `layout.json`
     exists. Existing layouts keep their views and drawings.
+
+**Game defaults (`mapper/game-defaults.json`).** Per game, what each *emulated* control (T.16000M /
+TWCS button numbers, hat directions, axes) does by default, shown read-only on the cards (`GAME …`)
+when a profile's optional `reference` names it (kept by `normalize_profile`; the daemon ignores it).
+Served by `GET /api/references` (`load_game_defaults`), installed flat next to the page. Keyed by
+emulated controls, so a reference stays valid however the user remaps.
+- **User sets** (the user asked for creating and sharing): one file per set in
+  `game-defaults/<id>.json` next to the mapping file, ids `u-…` (`USER_REF_ID`) so they never
+  collide with shipped ids; listed with `origin: "user"`. A file is a single SET
+  (`{version, id, name, source, verified, stick, throttle}`), the same format Export downloads and
+  Import accepts (Import also takes a shipped-style `{"games": {...}}` file). `PUT
+  /api/references/<u-id>` validates with `normalize_reference(strict=True)` (unknown controls are
+  an error, not dropped) and writes atomically; `DELETE` removes only `u-` files. Broken files are
+  skipped, never fatal.
+- **Page:** the Manage menu reuses the `#devMenu` popover. Creating: from the profile's notes
+  (labels `N` / `hat:dir` of both roles; the user's choice, mirroring how AC8's set was made), empty,
+  or a copy of a shipped set. `refEdit` turns GAME lines into inputs (`refField`) for user sets
+  only; edits save debounced (`saveRefSoon`). Shipped sets are read-only in the UI.
+- **Where AC8's data came from:** not public, and the game's content is encrypted (we don't break
+  that). AC8 has a built-in DirectInput flight-stick module with a Thrustmaster profile, but its
+  in-game guide only pictures the T.Flight HOTAS, not T.16000M button numbers. The user checked each
+  emulated button in game (1:1 mapping) and wrote notes on the cards; those became the reference.
+  Unrecorded buttons stay "no default" rather than guessed. The user asked to see a positional
+  guess first and chose the in-game check over shipping it.
 
 **Proton side.** Launch options name both virtual devices:
 `PROTON_ENABLE_HIDRAW=0x044F/0xB10A,0x044F/0xB687` (Proton matches the list by substring, so the

@@ -41,14 +41,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.realpath(__file__))
 # vkb_common lives in ../common in the repo and next to this file once installed
 sys.path[:0] = [HERE, os.path.join(os.path.dirname(HERE), "common")]
-from vkb_common import (DEFAULT_AXES, EMU_AXES, ROLES, default_profile, load_mapping,  # noqa: E402
-                        mapping_path, normalize_mapping, read_config)
+from vkb_common import (DEFAULT_AXES, EMU_AXES, HAT_DIRS, ROLE_AXES, ROLES, default_profile,  # noqa: E402
+                        load_mapping, mapping_path, normalize_mapping, read_config)
 
 CTL = os.environ.get("VKB_HOTAS_CTL", "/run/vkb-hotas/ctl.sock")
 PAGE = os.path.join(HERE, "vkb-mapper.html")
+GAME_DEFAULTS = os.path.join(HERE, "game-defaults.json")
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "vkb-mapper")
 IDLE_EXIT = 45  # seconds without any open UI before the server quits
-API_VERSION = 12  # bump when the page needs server features; the page refuses to save anything on a mismatch
+API_VERSION = 14  # bump when the page needs server features; the page refuses to save anything on a mismatch
 
 
 def initial_mapping():
@@ -347,6 +348,74 @@ def backup_layout(old_version):
             shutil.copy2(State.layout_path(), bak)
 
 
+# Game defaults: what each emulated control does by default in a game (display only).
+#   shipped: game-defaults.json next to the page, {"version": 1, "games": {id: SET}}
+#   user:    game-defaults/<id>.json next to the mapping file, one SET each, ids "u-..." so they
+#            never collide with shipped ones. Export/import use the same single-set file:
+#   SET = {"version": 1, "id": ..., "name": ..., "source": ..., "verified": bool,
+#          "stick": {"buttons": {"N": text}, "hat": {dir: text}, "axes": {AXIS: text}}, "throttle": {...}}
+REF_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+USER_REF_ID = re.compile(r"^u-[a-z0-9][a-z0-9-]{0,37}$")
+REF_MAX_BYTES = 64 << 10
+
+
+def normalize_reference(g, strict=False):
+    """Clean one SET. strict (user files and uploads): reject unknown controls instead of dropping them."""
+    if not isinstance(g, dict):
+        raise ValueError("a game defaults set must be an object")
+    name = str(g.get("name") or "").strip()[:80]
+    if not name:
+        raise ValueError("a game defaults set needs a name")
+    out = {"name": name, "source": str(g.get("source") or "").strip()[:400], "verified": bool(g.get("verified"))}
+    valid = {"buttons": lambda k: k.isdigit() and 1 <= int(k) <= 32, "hat": lambda k: k in HAT_DIRS}
+    for role in ROLES:
+        sec = g.get(role) if isinstance(g.get(role), dict) else {}
+        out[role] = {}
+        for part in ("buttons", "hat", "axes"):
+            ok = valid.get(part) or (lambda k, r=role: k in ROLE_AXES[r])
+            items = sec.get(part) or {}
+            if not isinstance(items, dict):
+                raise ValueError(f"{role}.{part} must be an object")
+            clean = {}
+            for k, v in items.items():
+                k, v = str(k), str(v).strip()[:60]
+                if not ok(k):
+                    if strict:
+                        raise ValueError(f"{role}.{part}: {k!r} is not a control of the emulated device")
+                    continue
+                if v:
+                    clean[str(int(k)) if part == "buttons" else k] = v
+            out[role][part] = clean
+    return out
+
+
+def user_ref_dir():
+    return os.path.join(os.path.dirname(State.path), "game-defaults")
+
+
+def load_game_defaults():
+    """All game default sets: shipped plus the user's own, each with "origin"."""
+    out = {}
+    raw = json.load(open(GAME_DEFAULTS))
+    for gid, g in (raw.get("games") or {}).items():
+        if REF_ID.match(str(gid)) and not USER_REF_ID.match(str(gid)):
+            try:
+                out[gid] = {**normalize_reference(g), "origin": "shipped"}
+            except ValueError:
+                pass
+    d = user_ref_dir()
+    for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        gid = f[:-5]
+        if not (f.endswith(".json") and USER_REF_ID.match(gid)):
+            continue
+        try:
+            with open(os.path.join(d, f)) as fh:
+                out[gid] = {**normalize_reference(json.loads(fh.read(REF_MAX_BYTES))), "origin": "user"}
+        except (OSError, ValueError):
+            pass  # a broken file just doesn't show up
+    return out
+
+
 def write_json(path, obj):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".tmp.", suffix=".json")
@@ -452,6 +521,11 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError, ValueError) as e:
                 lay, err = DEFAULT_LAYOUT, str(e)
             self._send(200, {"layout": lay, "error": err, "api": API_VERSION})
+        elif path == "/api/references":
+            try:
+                self._send(200, {"references": load_game_defaults(), "error": None})
+            except (OSError, ValueError) as e:
+                self._send(200, {"references": {}, "error": str(e)})
         elif path.startswith("/api/image/"):
             name = path.rsplit("/", 1)[1]
             if not IMAGE_NAME.match(name):
@@ -473,6 +547,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/layout":
             return self._put_layout()
+        if path.startswith("/api/references/"):
+            return self._put_reference(path.rsplit("/", 1)[1])
         if path != "/api/mapping":
             return self._send(404, {"error": "not found"})
         try:
@@ -486,6 +562,32 @@ class Handler(BaseHTTPRequestHandler):
                 json.dump(m, f, indent=2)
             os.replace(tmp, State.path)
         self._send(200, {"mapping": m})
+
+    def do_DELETE(self):
+        path = self._guard()
+        if path is None:
+            return
+        gid = path.rsplit("/", 1)[1] if path.startswith("/api/references/") else ""
+        if not USER_REF_ID.match(gid):
+            return self._send(400, {"error": "only your own game defaults (u-...) can be deleted"})
+        try:
+            os.unlink(os.path.join(user_ref_dir(), gid + ".json"))
+        except FileNotFoundError:
+            return self._send(404, {"error": "not found"})
+        self._send(200, {"ok": True})
+
+    def _put_reference(self, gid):
+        if not USER_REF_ID.match(gid):
+            return self._send(400, {"error": "user game defaults need an id like u-my-game"})
+        try:
+            if int(self.headers.get("Content-Length") or 0) > REF_MAX_BYTES:
+                raise ValueError("game defaults file too large")
+            ref = normalize_reference(self._body(), strict=True)
+        except (ValueError, TypeError) as e:
+            return self._send(400, {"error": str(e)})
+        with State.lock:
+            write_json(os.path.join(user_ref_dir(), gid + ".json"), {"version": 1, "id": gid, **ref})
+        self._send(200, {"reference": {**ref, "origin": "user"}})
 
     def do_POST(self):
         path = self._guard()

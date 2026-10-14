@@ -14,7 +14,7 @@ if [[ ! -d $lib ]]; then
     exit 0
 fi
 # repo source -> flat installed name (the install layout is flat in /usr/local/lib/vkb-hotas)
-for src in service/vkb-hotas.py common/vkb_common.py mapper/vkb-mapper.py mapper/vkb-mapper.html README.md; do
+for src in service/vkb-hotas.py common/vkb_common.py mapper/vkb-mapper.py mapper/vkb-mapper.html mapper/game-defaults.json README.md; do
     f=$(basename "$src")
     if cmp -s "$repo/$src" "$lib/$f"; then echo "  same     $src"; else echo "  DIFFERS  $src"; fi
 done

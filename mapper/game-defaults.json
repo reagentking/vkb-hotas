@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "comment": "What each control of the emulated Thrustmaster devices does by default in a game, shown read-only on HOTAS Mapper's cards. Keys are the emulated device's controls (what the game sees), so they stay valid however the real stick is remapped. Sections: stick = T.16000M, throttle = TWCS Throttle; each has buttons {\"N\": text}, hat {up/down/left/right: text}, axes {X/Y/RZ/SLIDER/...: text}. Set \"verified\" to true once checked against the game.",
+  "games": {
+    "ac8-default": {
+      "name": "Ace Combat 8 (Default flight stick layout)",
+      "source": "Buttons and hat: checked in game (Default flight stick layout, T.16000M as emulated by vkb-hotas), 2026-10-13. Axes: the game's own flight stick binding names. Buttons not listed had no recorded effect.",
+      "verified": true,
+      "stick": {
+        "buttons": {
+          "1": "Fire machine gun",
+          "2": "Fire missile / special weapon",
+          "3": "Change weapon (missile / special)",
+          "4": "Change target (hold: focus target)",
+          "5": "High-G turn",
+          "6": "Autopilot (menus: A / confirm)",
+          "7": "Deploy flares",
+          "8": "Change view",
+          "9": "Cycle radar map display",
+          "11": "Start / pause menu"
+        },
+        "hat": {
+          "up": "Menu up",
+          "down": "Menu down",
+          "left": "Menu left",
+          "right": "Menu right"
+        },
+        "axes": {
+          "X": "Roll",
+          "Y": "Pitch",
+          "RZ": "Yaw",
+          "SLIDER": "Throttle (accelerate / brake)"
+        }
+      },
+      "throttle": {
+        "buttons": {},
+        "hat": {},
+        "axes": {}
+      }
+    }
+  }
+}

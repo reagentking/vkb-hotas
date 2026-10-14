@@ -196,7 +196,8 @@ def default_match():
 #           "buttons": {"1": [1, 17], ...},          # emulated button -> sources
 #           "hat":     {"up": ["hat:up"], "down": [...], "left": [...], "right": [...]},
 #           "labels":  {"1": "Fire guns", "hat:up": "Camera"}},
-#       "throttle": {...}}}                          # the emulated TWCS: axes X Y Z RX RY RZ SLIDER, 14 | 32 buttons
+#       "throttle": {...},                           # the emulated TWCS: axes X Y Z RX RY RZ SLIDER, 14 | 32 buttons
+#       "reference": "ac8-default"}}                 # optional: game defaults shown in HOTAS Mapper
 # }
 # A source is a physical button number (1-based, in Linux/VKBDevCfg order) or a physical
 # hat direction "hat:up|down|left|right" on the role's own stick, or the same prefixed with
@@ -308,13 +309,22 @@ def normalize_role_profile(role, p):
     return out
 
 
+REFERENCE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+
+
 def normalize_profile(p):
-    """Validate a whole profile ({stick, throttle}); a version-1 profile becomes the stick section."""
+    """Validate a whole profile ({stick, throttle[, reference]}); a version-1 profile becomes the
+    stick section. "reference" names a game-defaults set (mapper/game-defaults.json), display only."""
     if not isinstance(p, dict):
         raise ValueError("profile must be an object")
     if not set(p) & set(ROLES):
         p = {"stick": p}  # version 1
     out = {}
+    ref = p.get("reference")
+    if ref is not None:
+        if not (isinstance(ref, str) and REFERENCE_ID.match(ref)):
+            raise ValueError(f"reference: bad id {ref!r}")
+        out["reference"] = ref
     for role in ROLES:
         try:
             out[role] = normalize_role_profile(role, p.get(role))

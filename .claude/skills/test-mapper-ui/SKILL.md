@@ -75,6 +75,10 @@ example, press a button and check `out.b` has the mapped bit set, or send
 - **Roles and devices:** both tabs render; Devices selects, swaps and clears the throttle (check
   `DIR/config`); unplug/replug updates the tab and banner; the "Games see" switch (panel and Devices) and `--expose`
   flip the VIRTUAL/REAL tab badge and banner, and persist to `DIR/config`; switching tabs repaints live values.
+- **Game defaults:** GAME lines on cards/axes for the selected set; Manage ▸ New from my notes /
+  New empty / Copy to my sets / Edit on the cards / Export / Import / Delete (check
+  `DIR/game-defaults/` on disk; Export is easiest to verify by intercepting `URL.createObjectURL`,
+  Import by setting `#refFile.files` from a `DataTransfer`).
 - **Mapping:** Assign (and Shift+Assign) moves a source off other slots *on both devices*; a press
   on the other stick saves a prefixed source (`throttle:7`) and shows a `THR`/`STK` chip tag;
   cross axes in the dropdown; labels persist; Test pulses light the right device's output.

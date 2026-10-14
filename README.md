@@ -164,6 +164,20 @@ Throttle); each tab has its own panels:
   messages. Names describe your hardware, so all profiles share them.
 - **5-way hat badges:** a chip whose button belongs to a 5-way hat shows the hat and direction,
   e.g. `BTN 11 · Hat 2 ▲`.
+- **Game defaults:** pick a game in **Game defaults** (profile bar) and every card shows, read-only,
+  what that emulated button, hat direction or axis does in the game by default, e.g.
+  `GAME Fire machine gun` on B1, so you know what to map without trying every button in the
+  game. Your remapping and notes stay separate. Included: **Ace Combat 8 (Default flight stick
+  layout)**, checked in game.
+- **Your own game defaults** (**Manage ▾** next to Game defaults):
+  - **New from my notes** turns the current profile's card notes into a set: try each button in
+    the game once, write what it did in its card's note, then create the set.
+  - **New empty set** / **Copy to my sets** (to change a shipped one), then **Edit on the cards**:
+    the GAME lines become text fields and save as you type.
+  - **Export…** saves a set as a small `.json` file to share; **Import…** loads one someone sent
+    you. Your sets live in `~/.config/vkb-hotas/game-defaults/` (marked "yours" in the list).
+  - To make a set part of HOTAS Mapper for everyone, add it to `mapper/game-defaults.json` in a
+    pull request.
 - **Profiles:** keep one per game. A profile covers both devices; the selected one is applied.
 
 Changes save to `~/.config/vkb-hotas/mapping.json`, and the daemon applies them within half a
@@ -295,7 +309,7 @@ throttle stick ┘     ▲              ▲      │    └─▶ virtual TWCS T
 |---|---|
 | `install.sh`, `uninstall.sh` | system install/removal (everything is installed flat into `/usr/local/lib/vkb-hotas`) |
 | `service/` | the root daemon `vkb-hotas.py`, its systemd unit, config template `vkb-hotas.default` and udev rule `72-vkb-hotas.rules` |
-| `mapper/` | HOTAS Mapper: server `vkb-mapper.py`, page `vkb-mapper.html` (standard library only, no build) and menu entry `vkb-mapper.desktop` |
+| `mapper/` | HOTAS Mapper: server `vkb-mapper.py`, page `vkb-mapper.html` (standard library only, no build), game default references `game-defaults.json` and menu entry `vkb-mapper.desktop` |
 | `common/` | `vkb_common.py`: config, roles, device selection, the mapping format and terminal pickers shared by everything |
 | `tools/` | helpers you run as your user: `proton-setup.py` (per-game prefix setup), `vkb-check.py` (setup and Proton-log diagnostics), `vkb-learn.py` (axis discovery) |
 | `dev/` | `fake-daemon.py`: the daemon's real event loop with simulated left and right Omni Throttles, for working on the GUI without root |

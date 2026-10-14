@@ -76,6 +76,14 @@ header{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:14px 24px
 .devrole select{width:100%}
 .devrole .st{margin-top:8px;font-size:12px;color:var(--muted)}
 .devrole .st code{font:11.5px var(--mono);color:var(--text)}
+.gref{display:flex;align-items:baseline;gap:6px;font:12px var(--sans);color:var(--green);min-height:16px}
+.gref b{font:700 9.5px var(--mono);letter-spacing:.12em;color:var(--muted);border:1px solid var(--line2);border-radius:3px;padding:0 4px}
+.gref.none{color:var(--dim)}
+.gref input{flex:1;min-width:0;background:rgba(93,255,168,.06);border:0;border-bottom:1px dashed rgba(93,255,168,.45);padding:1px 2px;font:12px var(--sans);color:var(--green)}
+.gref input:focus{outline:0;border-bottom-color:var(--green)}
+.axc .nm .gref input{width:100%;font-size:10.5px}
+.refedit .card{border-color:rgba(93,255,168,.25)}
+.axc .nm .gref{display:block;font:500 10.5px var(--sans);margin-top:2px}
 .chip .rl{font:700 9.5px var(--mono);letter-spacing:.06em;border:1px solid currentColor;border-radius:2px;padding:0 3px;opacity:.85}
 .pill{display:flex;align-items:center;gap:8px;font:600 11px var(--mono);letter-spacing:.12em;padding:6px 11px;border-radius:999px;border:1px solid var(--line2);white-space:nowrap}
 .pill .dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
@@ -289,6 +297,11 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
   <span style="width:14px"></span>
   <label>Buttons</label>
   <div class="seg" id="count"></div>
+  <span style="width:14px"></span>
+  <label for="gameRef">Game defaults</label>
+  <select id="gameRef" title="Show what each emulated button does by default in this game (shown on the cards; your notes and remapping are separate)"></select>
+  <button class="btn small" id="refMenuBtn" title="Create, edit, import or export game defaults">Manage ▾</button>
+  <input type="file" id="refFile" accept=".json,application/json" hidden>
   <span class="spacer"></span>
   <span class="save" id="save">loading…</span>
 </div>
@@ -363,7 +376,26 @@ const ROLE_INFO = {
           axes: [["Z","Throttle"],["X","Mini-stick X"],["Y","Mini-stick Y"],["RZ","Rocker / rudder"],["SLIDER","Antenna"],["RX","Toe brake R"],["RY","Toe brake L"]],
           defaults: {Z:"ABS_Z", X:"ABS_RX", Y:"ABS_RY", RZ:"ABS_RZ"}},
 };
-let role = "stick", layoutAll = null, readOnly = false;
+let role = "stick", layoutAll = null, readOnly = false, gameRefs = {};
+// the selected game-defaults reference for this role ({buttons, hat, axes}) or null
+const curRef = () => { const id = mapping?.profiles?.[mapping.active]?.reference; return id && gameRefs[id] ? gameRefs[id][role] : null; };
+const curRefInfo = () => gameRefs[mapping?.profiles?.[mapping.active]?.reference] || null;
+let refEdit = false, refTimer = null;
+const refEditable = () => refEdit && curRefInfo()?.origin === "user";
+// the GAME line of a card or axis: read-only text, or a text field while editing your own set
+function refField(part, key, cls = "div") {
+  const r = curRefInfo(); if (!r) return null;
+  const text = r[role][part][key] || "";
+  const d = el(cls, "gref" + (text || refEditable() ? "" : " none"));
+  if (cls === "div") d.append(el("b", null, "GAME"));
+  if (refEditable()) {
+    const inp = el("input"); inp.value = text; inp.maxLength = 60; inp.placeholder = "default in this game…";
+    inp.oninput = () => { const v = inp.value.trim(); if (v) r[role][part][key] = v; else delete r[role][part][key]; saveRefSoon(); };
+    d.append(inp);
+  } else d.append((cls === "div" ? "" : "game: ") + (text || (cls === "div" ? "no default" : "—")));
+  d.title = `Default in ${r.name}${r.origin === "user" ? " (yours)" : ""}${r.verified ? "" : " (not verified against the game)"}`;
+  return d;
+}
 const otherRole = r => r === "stick" ? "throttle" : "stick";
 const AXES = () => ROLE_INFO[role].axes;
 const HATS = [["up","↑"],["down","↓"],["left","←"],["right","→"]];
@@ -424,6 +456,12 @@ function renderProfileBar() {
   for (const name of Object.keys(mapping.profiles)) { const o = el("option", null, name); o.value = name; o.selected = name === mapping.active; sel.append(o); }
   const seg = $("#count"); seg.textContent = "";
   for (const n of ROLE_INFO[role].counts) { const b = el("button", n === prof().button_count ? "on" : "", String(n)); b.dataset.n = n; seg.append(b); }
+  const gr = $("#gameRef"); gr.textContent = "";
+  const cur = mapping.profiles[mapping.active].reference || "";
+  for (const [id, g] of [["", {name: "— none —"}], ...Object.entries(gameRefs)]) { const o = el("option", null, g.name + (g.origin === "user" ? " · yours" : "") + (id && !g.verified ? " (unverified)" : "")); o.value = id; o.selected = id === cur; gr.append(o); }
+  document.body.classList.toggle("refedit", refEditable());
+  $("#refMenuBtn").textContent = refEditable() ? "Editing ▾" : "Manage ▾";
+  if (cur && !gameRefs[cur]) { const o = el("option", null, cur + " (unknown)"); o.value = cur; o.selected = true; gr.append(o); }
 }
 
 function renderEmuAxes() {
@@ -436,6 +474,7 @@ function renderEmuAxes() {
     const cfg = prof().axes[ax];
     const row = el("div", "axc"); row.dataset.axis = ax;
     const nm = el("div", "nm", ax); nm.append(el("small", null, desc));
+    { const g = refField("axes", ax, "small"); if (g) nm.append(g); }
     const sel = el("select"); sel.title = "Source axis (THR/STK = on the other stick)";
     for (const n of ["", ...physAxes]) { const o = el("option", null, n ? axLabel(n) : "— none —"); o.value = n; o.selected = (cfg.src || "") === n; sel.append(o); }
     if (cfg.src && !physAxes.includes(cfg.src)) { const o = el("option", null, axLabel(cfg.src) + " (missing)"); o.value = cfg.src; o.selected = true; sel.append(o); }
@@ -523,14 +562,16 @@ function card(kind, key) {
   const p = prof(), list = outList(p, kind, key), lkey = kind === "b" ? key : `hat:${key}`;
   const c = el("div", "card"); c.dataset.kind = kind; c.dataset.key = key;
   const top = el("div", "top"); top.append(el("span", "id", kind === "b" ? `B${String(key).padStart(2, "0")}` : `HAT ${ARROW[key]}`), el("span", "led"));
-  const lab = el("input", "label"); lab.placeholder = "what does it do in-game?"; lab.maxLength = 48; lab.value = p.labels[lkey] || "";
+  const ref = curRef(), refText = ref ? (kind === "b" ? ref.buttons[key] : ref.hat[key]) : null;
+  const gl = refField(kind === "b" ? "buttons" : "hat", key);
+  const lab = el("input", "label"); lab.placeholder = refText ? "your note (optional)" : "what does it do in-game?"; lab.maxLength = 48; lab.value = p.labels[lkey] || "";
   lab.oninput = () => { if (lab.value.trim()) p.labels[lkey] = lab.value; else delete p.labels[lkey]; scheduleSave(); };
   const chips = sourceChips(list, i => { list.splice(i, 1); scheduleSave(); renderOutputs(); });
   const acts = el("div", "acts");
   const a = el("button", "btn small", "Assign"); a.onclick = e => startLearn({type:"out", kind, key}, e);
   acts.append(a);
   if (kind === "b") { const t = el("button", "btn small", "Test"); t.title = "Press this button in-game for a moment"; t.onclick = () => pulse(+key); acts.append(t); }
-  c.append(top, lab, chips, acts);
+  c.append(top, ...(gl ? [gl] : []), lab, chips, acts);
   c.onmouseenter = () => cardHighlight(kind, key, true);
   c.onmouseleave = () => cardHighlight(kind, key, false);
   return c;
@@ -862,6 +903,119 @@ $("#count").onclick = e => {
   else { const used = new Set(Object.values(p.buttons).flat()); for (let i = base + 1; i <= n; i++) p.buttons[i] = used.has(i) ? [] : [i]; }
   p.button_count = n; renderAll(); scheduleSave();
   toast(n === base ? `${n} buttons: identical to a real ${L.emuShort}` : `${n} buttons: games see a ${L.emuShort} with extra buttons`);
+};
+// ---------- game defaults: create, edit, import, export ----------
+function refId(name) {
+  const base = "u-" + (name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "game");
+  let id = base, i = 2; while (gameRefs[id]) id = `${base}-${i++}`; return id;
+}
+const refPayload = r => ({name: r.name, source: r.source || "", verified: !!r.verified, stick: r.stick, throttle: r.throttle});
+async function putRef(id, r) {
+  if (readOnly) { toast("Restart HOTAS Mapper first (an older version is still running)", true); return null; }
+  const j = await api("PUT", `/api/references/${id}`, refPayload(r));
+  gameRefs[id] = j.reference; return gameRefs[id];
+}
+function saveRefSoon() {
+  const id = mapping.profiles[mapping.active].reference, r = gameRefs[id]; if (!r) return;
+  setSave("saving game defaults…"); clearTimeout(refTimer);
+  refTimer = setTimeout(async () => {
+    try { await api("PUT", `/api/references/${id}`, refPayload(r)); setSave("game defaults saved", "ok"); }
+    catch (e) { setSave("game defaults not saved", "err"); toast("Game defaults not saved: " + e.message, true); }
+  }, 400);
+}
+async function useRef(id, edit) {
+  mapping.profiles[mapping.active].reference = id; refEdit = !!edit; scheduleSave(); renderAll();
+}
+const emptySections = () => Object.fromEntries(ROLES.map(r => [r, {buttons: {}, hat: {}, axes: {}}]));
+async function newRefFromNotes() {
+  const prof0 = mapping.profiles[mapping.active], secs = emptySections();
+  let n = 0;
+  for (const r of ROLES) for (const [k, v] of Object.entries(prof0[r].labels || {})) {
+    if (/^\d+$/.test(k)) { secs[r].buttons[k] = v; n++; } else if (k.startsWith("hat:")) { secs[r].hat[k.slice(4)] = v; n++; }
+  }
+  if (!n) { toast("This profile has no notes yet: write what each button does in the cards' note fields first.", true); return; }
+  const name = await ask("New game defaults from your notes", `Turns this profile's ${n} card notes into a game defaults set you can export and share. Name it after the game and layout, e.g. “Project Wingman (default)”.`, `${mapping.active} defaults`);
+  if (!name) return;
+  const id = refId(name);
+  try { await putRef(id, {name, source: `Made from the notes of HOTAS Mapper profile “${mapping.active}”.`, verified: true, ...secs}); }
+  catch (e) { toast("Not created: " + e.message, true); return; }
+  await useRef(id, false);
+  toast(`Created “${name}” from ${n} notes. Your notes are unchanged; clear them if the GAME lines are enough.`);
+}
+async function newRefEmpty() {
+  const name = await ask("New game defaults", "Name it after the game and layout. Then type each button's default into the GAME line on its card.", "");
+  if (!name) return;
+  const id = refId(name);
+  try { await putRef(id, {name, source: "", verified: false, ...emptySections()}); } catch (e) { toast("Not created: " + e.message, true); return; }
+  await useRef(id, true); toast("Type each default into the green GAME lines; it saves as you type. Manage ▸ Done editing when finished.");
+}
+async function copyRef() {
+  const r = curRefInfo(); if (!r) return;
+  const name = await ask("Copy to your game defaults", "A copy you can edit (the shipped set stays as it is).", `${r.name} (my copy)`);
+  if (!name) return;
+  const id = refId(name);
+  try { await putRef(id, {...JSON.parse(JSON.stringify(refPayload(r))), name}); } catch (e) { toast("Not copied: " + e.message, true); return; }
+  await useRef(id, true); toast(`Copied. Edit the GAME lines on the cards.`);
+}
+function exportRef() {
+  const id = mapping.profiles[mapping.active].reference, r = gameRefs[id]; if (!r) return;
+  const data = JSON.stringify({version: 1, id, ...refPayload(r)}, null, 2) + "\n";
+  const a = el("a"); a.href = URL.createObjectURL(new Blob([data], {type: "application/json"}));
+  a.download = `${id.replace(/^u-/, "")}.game-defaults.json`; document.body.append(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  toast(`Saved ${a.download}. Share the file; others load it with Manage ▸ Import.`);
+}
+$("#refFile").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  let data;
+  try { if (f.size > 65536) throw new Error("file too large"); data = JSON.parse(await f.text()); }
+  catch (err) { toast("Not a game defaults file: " + err.message, true); return; }
+  const sets = data && typeof data === "object" && data.games && typeof data.games === "object" ? Object.values(data.games) : [data];
+  let first = null, done = 0;
+  for (const set of sets) {
+    try { const id = refId(String(set?.name || "imported")); await putRef(id, {...emptySections(), ...set}); first ||= id; done++; }
+    catch (err) { toast(`Skipped “${set?.name || "?"}”: ${err.message}`, true); }
+  }
+  if (first) { await useRef(first, false); toast(`Imported ${done} game defaults set${done > 1 ? "s" : ""}.`); }
+};
+async function deleteRef() {
+  const id = mapping.profiles[mapping.active].reference, r = gameRefs[id]; if (!r || r.origin !== "user") return;
+  if (!await ask("Delete game defaults", `Delete your “${r.name}”? Export it first if you might want it again.`, "", false)) return;
+  try { await api("DELETE", `/api/references/${id}`); } catch (e) { toast("Not deleted: " + e.message, true); return; }
+  delete gameRefs[id];
+  for (const p of Object.values(mapping.profiles)) if (p.reference === id) delete p.reference;
+  refEdit = false; scheduleSave(); renderAll(); toast(`Deleted “${r.name}”.`);
+}
+function openRefMenu(anchor) {
+  const menu = $("#devMenu");
+  if (!menu.hidden && menu.dataset.role === "ref") { closeDevMenu(); return; }
+  menu.textContent = ""; menu.dataset.role = "ref";
+  const r = curRefInfo(), mine = r?.origin === "user";
+  const item = (label, note, fn, disabled) => {
+    const b = el("button"); b.append(el("span", "mk", ""), label); if (note) b.append(el("small", null, note));
+    b.disabled = !!disabled; b.onclick = async () => { closeDevMenu(); await fn(); }; menu.append(b);
+  };
+  menu.append(el("div", "hd", r ? `Game defaults: ${r.name}` : "Game defaults"));
+  item("New from my notes", "this profile's card notes", newRefFromNotes);
+  item("New empty set", "type defaults on the cards", newRefEmpty);
+  if (r && !mine) item("Copy to my sets", "to edit it", copyRef);
+  if (mine) item(refEdit ? "Done editing" : "Edit on the cards", refEdit ? "back to read-only" : "GAME lines become fields", () => { refEdit = !refEdit; renderAll(); });
+  menu.append(el("div", "sep"));
+  item("Import…", "a .json file someone shared", () => $("#refFile").click());
+  item("Export…", r ? "save this set as a file" : "pick a set first", exportRef, !r);
+  if (mine) { menu.append(el("div", "sep")); item("Delete…", "your set", deleteRef); }
+  menu.hidden = false;
+  const a = anchor.getBoundingClientRect();
+  menu.style.top = (a.bottom + 6) + "px"; menu.style.left = Math.max(8, Math.min(a.left, innerWidth - menu.offsetWidth - 8)) + "px";
+}
+$("#refMenuBtn").onclick = e => { e.stopPropagation(); openRefMenu(e.currentTarget); };
+$("#gameRef").onchange = e => {
+  refEdit = false;
+  const p = mapping.profiles[mapping.active];
+  if (e.target.value) p.reference = e.target.value; else delete p.reference;
+  scheduleSave(); renderAll();
+  const g = gameRefs[e.target.value];
+  if (g) toast(`Showing ${g.name} defaults on the cards` + (g.verified ? "" : " (not yet verified against the game)"));
 };
 $("#learnCancel").onclick = stopLearn;
 document.addEventListener("keydown", e => { if (e.key === "Escape" && learn) stopLearn(); });
@@ -1355,8 +1509,9 @@ function connect() {
   compass($("#physHat"), refs.physHat); compass($("#emuHat"), refs.emuHat);
   try {
     const [r, l] = await Promise.all([api("GET", "/api/mapping"), api("GET", "/api/layout")]);
+    try { const g = await api("GET", "/api/references"); gameRefs = g.references || {}; if (g.error) toast("Game defaults couldn't be read: " + g.error, true); } catch (e) { gameRefs = {}; }
     mapping = r.mapping;
-    if (l.api !== 12) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
+    if (l.api !== 14) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
       readOnly = true; layoutAll = layout = null;
       for (const [k, p] of Object.entries(mapping.profiles)) if (!p.stick) mapping.profiles[k] = {stick: p, throttle: freshRole("throttle")};
       for (const sel of [".maptools", ".stage"]) document.querySelector(sel).hidden = true;
