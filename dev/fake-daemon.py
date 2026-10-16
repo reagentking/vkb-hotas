@@ -159,6 +159,21 @@ class FakeUhid:
         os.close(self._w)
 
 
+class FakePad:
+    """Stands in for the uinput Xbox pad: keeps what the daemon sent."""
+
+    def __init__(self):
+        self.sends = 0
+        self.last = None
+
+    def send(self, out):
+        self.sends += 1
+        self.last = out
+
+    def destroy(self):
+        pass
+
+
 def ev(etype, code, value):
     return InputEvent(0, 0, etype, code, value)
 
@@ -214,7 +229,7 @@ def main():
 
     v.ControlServer.PATH = sock_path
     ctl = v.ControlServer(os.getuid())
-    daemon = v.Daemon(selectors, vkb_common.exposed_roles(cfg), ctl=ctl,
+    daemon = v.Daemon(selectors, vkb_common.role_modes(cfg), ctl=ctl, make_pad=FakePad,
                       watcher=v.MappingWatcher(os.path.join(args.dir, "mapping.json"), os.getuid()),
                       source=FakeSource(sticks), make_uhid=FakeUhid, hider=None,
                       persist=lambda updates: vkb_common.write_config(updates, config),

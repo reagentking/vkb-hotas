@@ -11,7 +11,8 @@ half a second, even while a game is running.
 
   vkb-mapper.py [--port N] [--no-browser]
   vkb-mapper.py --expose stick|throttle|all   give the real stick(s) to games as they are
-  vkb-mapper.py --hide stick|throttle|all     hide them again and emulate the Thrustmaster devices
+  vkb-mapper.py --xbox stick|throttle|all     make them feed a virtual Xbox 360 controller instead
+  vkb-mapper.py --hide stick|throttle|all     back to the virtual Thrustmaster devices
   vkb-mapper.py --status                      show which stick feeds which role
 
 No extra packages needed. The server listens on 127.0.0.1 only, requires a
@@ -41,15 +42,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.realpath(__file__))
 # vkb_common lives in ../common in the repo and next to this file once installed
 sys.path[:0] = [HERE, os.path.join(os.path.dirname(HERE), "common")]
-from vkb_common import (DEFAULT_AXES, EMU_AXES, HAT_DIRS, ROLE_AXES, ROLES, default_profile,  # noqa: E402
-                        load_mapping, mapping_path, normalize_mapping, read_config)
+from vkb_common import (DEFAULT_AXES, EMU_AXES, HAT_DIRS, MODES, ROLE_AXES, ROLES, XBOX_BUTTONS,  # noqa: E402
+                        default_profile, load_mapping, mapping_path, normalize_mapping, read_config)
 
 CTL = os.environ.get("VKB_HOTAS_CTL", "/run/vkb-hotas/ctl.sock")
 PAGE = os.path.join(HERE, "vkb-mapper.html")
 GAME_DEFAULTS = os.path.join(HERE, "game-defaults.json")
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "vkb-mapper")
 IDLE_EXIT = 45  # seconds without any open UI before the server quits
-API_VERSION = 15  # bump when the page needs server features; the page refuses to save anything on a mismatch
+API_VERSION = 16  # bump when the page needs server features; the page refuses to save anything on a mismatch
 
 
 def initial_mapping():
@@ -600,8 +601,20 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 raise TypeError("expected an object")
             role = body.get("role", "stick")
+            if path == "/api/pulse" and role == "xbox":
+                b = body.get("button")
+                if b not in XBOX_BUTTONS:
+                    return self._send(400, {"error": "unknown Xbox button"})
+                daemon_command({"cmd": "pulse", "role": "xbox", "button": b})
+                return self._send(200, {"ok": True})
             if role not in ROLES:
                 return self._send(400, {"error": "unknown role"})
+            if path == "/api/mode":
+                mode = body.get("mode")
+                if mode not in MODES:
+                    return self._send(400, {"error": "unknown mode"})
+                r = daemon_command({"cmd": "mode", "role": role, "mode": mode}, want_result=True)
+                return self._send(200 if r["ok"] else 400, {"ok": r["ok"], "error": r.get("error")})
             if path == "/api/pulse":
                 daemon_command({"cmd": "pulse", "role": role, "button": int(body.get("button"))})
                 return self._send(200, {"ok": True})
@@ -744,6 +757,9 @@ def print_status():
             state = "not used"
         elif info["exposed"]:
             state = "EXPOSED: games see the real stick"
+        elif info.get("mode") == "xbox":
+            pad = h.get("xbox") or {}
+            state = f"feeds the virtual {pad.get('name', 'Xbox controller')}" + ("" if pad.get("active") else " (waiting for the stick)")
         else:
             state = f"games see a {info['emulated']['name']}" if info["emulated"]["active"] else "waiting for the stick"
         print(f"{r:9} {src}\n          {state}")
@@ -752,9 +768,9 @@ def print_status():
         print("other sticks: " + ", ".join(f"{d['name']} ({d['selector']})" for d in others))
 
 
-def cli_expose(role, on):
+def cli_mode(role, mode):
     try:
-        r = daemon_command({"cmd": "expose", "role": role, "on": on}, want_result=True)
+        r = daemon_command({"cmd": "mode", "role": role, "mode": mode}, want_result=True)
     except PermissionError:
         sys.exit("no access to the vkb-hotas daemon: VKB_HOTAS_USER in /etc/default/vkb-hotas must be you")
     except OSError as e:
@@ -762,8 +778,7 @@ def cli_expose(role, on):
     if not r["ok"]:
         sys.exit(f"vkb-hotas: {r['error']}")
     print_status()
-    if on:
-        print("Games started from now on see the real stick; restart a running game to pick it up.")
+    print("Restart a running game to pick up the change.")
 
 
 def url_file():
@@ -800,16 +815,20 @@ def main():
     g.add_argument("--expose", choices=(*ROLES, "all"), metavar="ROLE",
                    help="give the real stick of a role (stick, throttle or all) to games untouched; "
                         "its virtual device is removed. Remembered across restarts")
+    g.add_argument("--xbox", choices=(*ROLES, "all"), metavar="ROLE",
+                   help="hide the real stick and make it feed a virtual Xbox 360 controller (shared by all "
+                        "sticks in this mode), for games that support pads but not flight sticks. Remembered")
     g.add_argument("--hide", choices=(*ROLES, "all"), metavar="ROLE",
-                   help="undo --expose: hide the real stick again and emulate the Thrustmaster device")
+                   help="back to normal: hide the real stick and emulate its Thrustmaster device")
     g.add_argument("--status", action="store_true", help="show which stick feeds which role, and exit")
     args = ap.parse_args()
-    if args.status or args.expose or args.hide:
+    if args.status or args.expose or args.hide or args.xbox:
         try:
             if args.status:
                 print_status()
             else:
-                cli_expose(args.expose or args.hide, bool(args.expose))
+                cli_mode(args.expose or args.xbox or args.hide,
+                         "real" if args.expose else "xbox" if args.xbox else "virtual")
         except PermissionError:
             sys.exit("no access to the vkb-hotas daemon: VKB_HOTAS_USER in /etc/default/vkb-hotas must be you")
         except (OSError, ValueError) as e:

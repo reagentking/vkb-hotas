@@ -16,6 +16,11 @@ VKB_HOTAS_THROTTLE=""
 # or both, space separated). Set with: vkb-mapper --expose ROLE / --hide ROLE
 VKB_HOTAS_EXPOSE=""
 
+# Roles whose real stick feeds a virtual Xbox 360 controller instead of its
+# Thrustmaster device, for games that support pads but not flight sticks (all
+# such sticks share one pad). Set with: vkb-mapper --xbox ROLE / --hide ROLE
+VKB_HOTAS_XBOX=""
+
 # Desktop user allowed to remap with vkb-mapper (owns the control socket and
 # ~USER/.config/vkb-hotas/mapping.json). install.sh fills in the sudo caller.
 VKB_HOTAS_USER=""

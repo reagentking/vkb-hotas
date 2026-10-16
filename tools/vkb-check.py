@@ -25,8 +25,8 @@ import socket
 # vkb_common lives in ../common in the repo and next to this file once installed
 _here = os.path.dirname(os.path.realpath(__file__))
 sys.path[:0] = [_here, os.path.join(os.path.dirname(_here), "common")]
-from vkb_common import (CONFIG, EMULATED_IDS, EMULATED_NAMES, ROLES, exposed_roles, load_mapping, mapping_path,
-                        parse_match, role_selectors)
+from vkb_common import (CONFIG, EMULATED_IDS, EMULATED_NAMES, ROLES, UHID_PHYS, XBOX_ID, XBOX_NAME,
+                        load_mapping, mapping_path, parse_match, role_modes, role_selectors)
 
 if sys.stdout.isatty():
     OK, BAD, WARN, INFO = "\033[32mOK\033[0m", "\033[31mFAIL\033[0m", "\033[33mWARN\033[0m", "  "
@@ -64,16 +64,32 @@ def hid_name(hid):
 
 
 def configured_roles(stick_override=None):
-    """{role: (selector, exposed)} from the running daemon if reachable, else the config file."""
+    """{role: (selector, exposed, mode)} from the running daemon if reachable, else the config file.
+    mode: "virtual" (Thrustmaster device), "xbox" (feeds the virtual Xbox pad) or "real" (= exposed)."""
     hello = daemon_hello()
     if hello and "roles" in hello:
-        roles = {r: (v["selector"], v["exposed"]) for r, v in hello["roles"].items()}
+        roles = {r: (v["selector"], v["exposed"], v.get("mode") or ("real" if v["exposed"] else "virtual"))
+                 for r, v in hello["roles"].items()}
     else:
-        sel, exp = role_selectors(), exposed_roles()
-        roles = {r: (sel[r] if (sel[r] or r == "stick") else None, r in exp) for r in ROLES}
+        sel, modes = role_selectors(), role_modes()
+        roles = {r: (sel[r] if (sel[r] or r == "stick") else None, modes[r] == "real", modes[r]) for r in ROLES}
     if stick_override is not None:
-        roles["stick"] = (stick_override, roles["stick"][1])
+        roles["stick"] = (stick_override, *roles["stick"][1:])
     return roles
+
+
+def xbox_pads():
+    """/dev/input nodes of our virtual Xbox pad (found by its phys in /proc/bus/input/devices)."""
+    out = []
+    try:
+        blocks = open("/proc/bus/input/devices").read().split("\n\n")
+    except OSError:
+        return out
+    for b in blocks:
+        if f'Phys={UHID_PHYS}' in b and f'Name="{XBOX_NAME}"' in b:
+            m = re.search(r"^H: Handlers=(.*)$", b, re.M)
+            out += [f"/dev/input/{h}" for h in (m[1].split() if m else []) if h.startswith(("event", "js"))]
+    return out
 
 
 def host_checks(stick_override):
@@ -90,7 +106,7 @@ def host_checks(stick_override):
     hide_rule = "/run/udev/rules.d/72-vkb-hotas-hide.rules"
     hidden_any = False
     for r in ROLES:
-        sel, exposed = roles[r]
+        sel, exposed, mode = roles[r]
         if sel is None:
             print(f"{INFO}{r}: not used (no {EMULATED_NAMES[r]})")
             continue
@@ -102,7 +118,9 @@ def host_checks(stick_override):
         if not real:
             print(f"  [{WARN}] {r}: real stick {label} not connected")
         for h in real:
-            print(f"{INFO}{r}: {hid_name(h)} ({os.path.basename(h)}){'  EXPOSED to games (vkb-mapper --hide ' + r + ' to undo)' if exposed else ''}")
+            print(f"{INFO}{r}: {hid_name(h)} ({os.path.basename(h)})"
+                  + ("  EXPOSED to games (vkb-mapper --hide " + r + " to undo)" if exposed else
+                     "  feeds the virtual Xbox controller (vkb-mapper --hide " + r + " to undo)" if mode == "xbox" else ""))
             for n in nodes(h):
                 vis = can_open(n)
                 if exposed:
@@ -113,16 +131,27 @@ def host_checks(stick_override):
         emu_id = EMULATED_IDS[r]
         virt = hid_devices(*emu_id)
         name = f"virtual {EMULATED_NAMES[r]} {emu_id[0]:04x}:{emu_id[1]:04x}"
-        if exposed:
-            print(f"  [{OK if not virt else WARN}] {name} {'removed while exposed' if not virt else 'present although exposed'}")
+        if mode != "virtual":
+            why = "exposed" if exposed else "in Xbox mode"
+            print(f"  [{OK if not virt else WARN}] {name} {'removed while ' + why if not virt else 'present although ' + why}")
         elif not virt:
             print(f"  [{BAD if real else WARN}] {name} not present")
-        for h in ([] if exposed else virt):
+        for h in (virt if mode == "virtual" else []):
             for n in nodes(h):
                 vis = can_open(n)
                 print(f"  [{OK if vis else BAD}] virtual {n:20} {'openable by you' if vis else 'NOT openable (udev rule missing?)'}")
         if len(virt) > 1:
             print(f"  [{WARN}] {len(virt)} devices with {emu_id[0]:04x}:{emu_id[1]:04x}: a real {EMULATED_NAMES[r]} is plugged in too; games may pick either")
+    xbox = [r for r in ROLES if roles[r][0] is not None and roles[r][2] == "xbox"]
+    if xbox:
+        pads = xbox_pads()
+        print(f"{INFO}Xbox controller (fed by {' + '.join(xbox)}):")
+        if not pads:
+            print(f"  [{WARN}] virtual {XBOX_NAME} {XBOX_ID[0]:04x}:{XBOX_ID[1]:04x} not present "
+                  f"(appears once a stick in Xbox mode is connected; see journalctl -u vkb-hotas -b)")
+        for n in pads:
+            vis = can_open(n)
+            print(f"  [{OK if vis else BAD}] virtual {n:20} {'openable by you' if vis else 'NOT openable (uaccess missing?)'}")
     if hidden_any:
         print(f"  [{OK if os.path.exists(hide_rule) else WARN}] runtime hiding rule {hide_rule} "
               f"{'present' if os.path.exists(hide_rule) else 'missing (permissions may come back on a session change)'}")
@@ -165,7 +194,8 @@ def mapper_checks():
 
 
 def sdl_probe(roles):
-    real_ids = [(r, *parse_match(sel), exposed) for r, (sel, exposed) in roles.items() if sel is not None]
+    real_ids = [(r, *parse_match(sel), exposed) for r, (sel, exposed, _) in roles.items() if sel is not None]
+    want_pad = any(sel is not None and mode == "xbox" for sel, _, mode in roles.values())
     for lib in ("libSDL3.so.0", "libSDL3.so"):
         try:
             sdl = ctypes.CDLL(lib)
@@ -194,10 +224,11 @@ def sdl_probe(roles):
         j = ids[i]
         v, p = sdl.SDL_GetJoystickVendorForID(j), sdl.SDL_GetJoystickProductForID(j)
         real = next((x for x in real_ids if v == x[1] and (x[2] is None or p == x[2])), None)
-        if not real and (v, p) not in EMU_IDS:
+        pad = (v, p) == XBOX_ID and want_pad
+        if not real and (v, p) not in EMU_IDS and not pad:
             continue
         gp = sdl.SDL_IsGamepad(j)
-        good = not gp and (not real or real[3])
+        good = gp if pad else not gp and (not real or real[3])
         note = ("  <- real stick, exposed on purpose" if real and real[3] else
                 "  <- real stick still visible" if real else "")
         print(f"    [{OK if good else BAD}] {v:04x}:{p:04x} {sdl.SDL_GetJoystickNameForID(j).decode(errors='replace')!r} "
@@ -206,7 +237,7 @@ def sdl_probe(roles):
 
 
 def analyse(path, roles):
-    real_ids = [(r, *parse_match(sel), exposed) for r, (sel, exposed) in roles.items() if sel is not None]
+    real_ids = [(r, *parse_match(sel), exposed) for r, (sel, exposed, _) in roles.items() if sel is not None]
     print(f"\n== Proton log {path}")
     head = open(path, errors="replace").read(4000)
     for key, rx in (("proton", r"Proton: (.*)"), ("appid", r"SteamGameId: (\d+)")):
@@ -247,8 +278,8 @@ def analyse(path, roles):
 
     print(f"{INFO}winebus SDL backend: {'disabled (hidraw path)' if sdl_off else 'ENABLED (run ./tools/proton-setup.py)'}")
     if devs:
-        for r, (sel, exposed) in roles.items():
-            if sel is None or exposed:
+        for r, (sel, exposed, mode) in roles.items():
+            if sel is None or mode != "virtual":
                 continue
             name = f"virtual {EMULATED_NAMES[r]}"
             emu = devs.get(EMULATED_IDS[r])
@@ -265,6 +296,15 @@ def analyse(path, roles):
                 print(f"  [{BAD}] real {x[0]} stick {v:04x}:{p:04x} was visible to the game (not hidden)")
         if not leaked:
             print(f"  [{OK}] real sticks not visible to the game")
+        if any(sel is not None and mode == "xbox" for sel, _, mode in roles.values()):
+            pad = devs.get(XBOX_ID)
+            if pad is None:
+                print(f"  [{WARN}] the virtual Xbox controller never reached Wine"
+                      + (" (this prefix has SDL disabled by proton-setup: undo it for pad games with"
+                         " ./tools/proton-setup.py --undo)" if sdl_off else ""))
+            else:
+                print(f"  [{OK if pad[0] else WARN}] Wine created the virtual Xbox controller: "
+                      f"{'gamepad (XInput)' if pad[0] else 'NOT as a gamepad'} via {'hidraw' if pad[1] else 'SDL/evdev'}")
     elif traced:
         print(f"  [{WARN}] no HID devices in log")
 

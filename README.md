@@ -24,7 +24,10 @@ small root daemon that:
 
 Any button or axis of either stick can drive either virtual device. A real stick
 can also be handed to games as it is, without stopping the service
-(`vkb-mapper --expose`). Stop the service and everything returns to normal.
+(`vkb-mapper --expose`), or feed a virtual **Xbox 360 controller** instead, for
+games that support pads but not flight sticks (`vkb-mapper --xbox`, see
+[Xbox controller mode](#xbox-controller-mode)). Stop the service and everything
+returns to normal.
 
 ## Status
 
@@ -35,13 +38,15 @@ can also be handed to games as it is, without stopping the service
 | Ace Combat 8 (Proton Hotfix) | game acquires and polls the stick; shows controller button icons; flight not yet confirmed |
 | Project Wingman (Proton Experimental) | game opens the stick and receives input; bind controls in the game's binding menu (click a binding, then move the axis or press the button) |
 | Second stick as TWCS Throttle | tested with simulated sticks only; not yet with real hardware or games |
+| Xbox controller mode | new: tested with simulated sticks; not yet in a game |
 
 Other VKB models should work after adjusting axes in HOTAS Mapper (or with `--axis`, see [Mapping](#mapping)).
 Reports from other sticks and games are welcome.
 
 ## Requirements
 
-- Linux with systemd + udev, and a kernel with `uhid` (all mainstream distros)
+- Linux with systemd + udev, and a kernel with `uhid` (all mainstream distros); Xbox
+  controller mode also needs `uinput` (standard too)
 - Python 3 and python-evdev available to **root's** `python3`
   (Arch `python-evdev`, Debian/Ubuntu `python3-evdev`, Fedora `python3-evdev`)
 - Steam with Proton. Native Steam, Flatpak and Snap Steam installs are all
@@ -116,16 +121,18 @@ vkb-mapper          # or "HOTAS Mapper" in your application menu
 ```
 
 A local page opens in your browser. The tabs at the top switch between the
-**Stick** (real stick → T.16000M) and the **Throttle** (second real stick → TWCS
-Throttle); each tab has its own panels:
+**Stick** (real stick → T.16000M), the **Throttle** (second real stick → TWCS
+Throttle) and the **Xbox** controller (see [Xbox controller mode](#xbox-controller-mode));
+each tab has its own panels:
 
 - **Choosing sticks:** click the real stick's name (amber, ▾) in a tab for a quick list, or open
   **Devices** for the same choices with each role's status. Choose which connected stick feeds the
   T.16000M and which (or none) feeds the TWCS Throttle. Picking the stick the other role uses swaps
   them. The choice takes effect at once and is saved for the service.
-- **What games see:** each tab shows a **VIRTUAL** or **REAL** badge, and the **Games see:
-  Virtual | Real stick** switch at the top of the stick panel (also in **Devices**) flips it,
-  the same as `vkb-mapper --expose/--hide` (see [Everyday use](#everyday-use)).
+- **What games see:** each stick tab shows a **VIRTUAL**, **XBOX** or **REAL** badge, and the
+  **Games see: Virtual | Xbox pad | Real stick** switch at the top of the stick panel (also in
+  **Devices**) changes it, the same as `vkb-mapper --hide/--xbox/--expose` (see
+  [Everyday use](#everyday-use)).
 - **Your stick:** live axes, hat and every physical button. Pressed buttons light up, and
   each one is tagged with the emulated control it drives (on either device).
 - **What the game sees:** the emulated device's buttons, hat directions and axes.
@@ -209,6 +216,43 @@ the old `layout.json` is kept as `layout.json.bak-v<old version>`. Stick maps ke
 dropdown next to **Photo…**, or add a view with **+ View** (e.g. one using "SCG grip side
 (triggers)").
 
+## Xbox controller mode
+
+Some games support Xbox controllers but not flight sticks or HOTAS. For those, a stick can
+feed a virtual **Xbox 360 controller** instead of its Thrustmaster device. Games and Steam
+see an ordinary wired Xbox 360 pad (`045e:028e`, the layout of Linux's own Xbox driver),
+and Proton hands it to the game as an XInput controller.
+
+- **Turn it on:** click the stick name on the **Xbox** tab (▾) and pick the sticks that should
+  feed it. Picking a stick that's currently the T.16000M (or TWCS) asks first, because that
+  device then disappears for games; picking a stick no role uses makes it the throttle stick.
+  Picking a stick already feeding the pad offers to switch it back. **Devices** has the same
+  choices as checkboxes in its **Xbox controller** section. Or set **Games see** to
+  **Xbox pad** for a stick (Stick/Throttle tab, Devices, or the Xbox tab), or run
+  `vkb-mapper --xbox stick` (`throttle`, `all`).
+  `vkb-mapper --hide stick` goes back to the T.16000M. The choice is remembered across
+  restarts, and only one device per stick is visible to games at a time.
+- **One pad for both sticks:** every stick set to Xbox feeds the same controller. Only sticks
+  set to Xbox reach it, so nothing drives two devices a game can see.
+- **Mapping:** the **Xbox** tab works like the others (Assign, Learn, Test, notes, sources
+  from either stick). Its mapping is separate from the T.16000M/TWCS ones, so switching
+  modes keeps both. Defaults are flight-style:
+  - stick X/Y → left stick, twist → right stick X;
+  - Omni Throttle lever → triggers: back half **LT**, front half **RT** (each trigger's
+    **Back half / Front half** setting; **Invert** flips which end is back);
+  - buttons 1–10 → A, B, X, Y, LB, RB, Back, Start, left/right stick click, hat → D-pad.
+    Guide is unassigned (it usually opens the Steam overlay).
+  - **LT (full)** / **RT (full)** cards let a button pull a trigger all the way, e.g. the
+    stick's trigger as RT.
+- **Proton:** don't run `proton-setup.py` for a game you play in Xbox mode. It turns off
+  Proton's SDL gamepad support in that game's prefix (needed for the Thrustmaster devices),
+  and SDL is what presents the pad to the game as an Xbox controller. Already did? Undo it
+  with `./tools/proton-setup.py --undo`.
+- **Steam Input** treats it like any Xbox controller, so a per-game Steam Input layout
+  applies on top if you've set one.
+- **Limits:** a pad has 11 buttons, 2 triggers, 2 sticks and a D-pad, so only the buttons you
+  choose are used. Rumble is accepted and ignored.
+
 ## Configuration
 
 `/etc/default/vkb-hotas` (a systemd EnvironmentFile: **no comments after values**):
@@ -217,13 +261,14 @@ dropdown next to **Photo…**, or add a view with **+ View** (e.g. one using "SC
 VKB_HOTAS_DEVICE="231d:3200"        # stick -> T.16000M
 VKB_HOTAS_THROTTLE="231d:3201"      # optional stick -> TWCS Throttle ("" = none)
 VKB_HOTAS_EXPOSE=""                 # roles given to games untouched: stick, throttle
+VKB_HOTAS_XBOX=""                   # roles feeding the virtual Xbox controller instead
 VKB_HOTAS_USER="yourname"
 VKB_HOTAS_ARGS="--button-count 32 --invert SLIDER"
 ```
 
 (The comments above are for this README only; in the real file, comments go on their own lines.)
-The installer and HOTAS Mapper write the device lines, and `vkb-mapper --expose/--hide`
-writes `VKB_HOTAS_EXPOSE`.
+The installer and HOTAS Mapper write the device lines, and `vkb-mapper --expose/--xbox/--hide`
+(or the **Games see** switch) writes `VKB_HOTAS_EXPOSE` and `VKB_HOTAS_XBOX`.
 
 The axis/button options in `VKB_HOTAS_ARGS` define the built-in default
 T.16000M profile. Once you save a mapping in HOTAS Mapper, its active profile takes
@@ -268,6 +313,7 @@ throttle), plus button numbers above 16.
 
   ```bash
   vkb-mapper --expose stick         # or throttle, or all
+  vkb-mapper --xbox stick           # feed the virtual Xbox controller instead
   vkb-mapper --hide stick           # back to the Thrustmaster device
   vkb-mapper --status               # which stick feeds what
   ```
@@ -308,9 +354,10 @@ sudo ./uninstall.sh
 ```
 real stick ────┐                                ┌─▶ virtual T.16000M      (hidraw + evdev) ─┐
                ├─evdev (grabbed)─▶ vkb-hotas.py ┤                                           ├─▶ Wine winebus (hidraw) ─▶ DirectInput ─▶ game
-throttle stick ┘     ▲              ▲      │    └─▶ virtual TWCS Throttle (hidraw + evdev) ─┘
-                     │  mapping.json┘      │ ctl.sock (live state, test presses, device choice, expose)
-  hidden: runtime udev rule drops uaccess  ▼
+throttle stick ┘     ▲              ▲      │    ├─▶ virtual TWCS Throttle (hidraw + evdev) ─┘
+                     │  mapping.json┘      │    └─▶ or: virtual Xbox 360 pad (uinput evdev) ──▶ Wine winebus (SDL) ─▶ XInput ─▶ game
+  hidden: runtime udev rule drops uaccess  │ ctl.sock (live state, test presses, device choice, mode)
+                                           ▼
                                      vkb-mapper.py ◀──▶ browser UI
 ```
 
@@ -321,7 +368,7 @@ throttle stick ┘     ▲              ▲      │    └─▶ virtual TWCS T
 | `mapper/` | HOTAS Mapper: server `vkb-mapper.py`, page `vkb-mapper.html` (standard library only, no build), game default references `game-defaults.json` and menu entry `vkb-mapper.desktop` |
 | `common/` | `vkb_common.py`: config, roles, device selection, the mapping format and terminal pickers shared by everything |
 | `tools/` | helpers you run as your user: `proton-setup.py` (per-game prefix setup), `vkb-check.py` (setup and Proton-log diagnostics), `vkb-learn.py` (axis discovery) |
-| `dev/` | `fake-daemon.py`: the daemon's real event loop with simulated left and right Omni Throttles, for working on the GUI without root |
+| `dev/` | `fake-daemon.py`: the daemon's real event loop with simulated left and right Omni Throttles (and a stand-in Xbox pad), for working on the GUI without root |
 | `CLAUDE.md`, `.claude/skills/` | guidance and workflows for Claude Code sessions: verify an install, test the installer and the mapper UI without root, ship a change, analyse Proton logs |
 
 ## License

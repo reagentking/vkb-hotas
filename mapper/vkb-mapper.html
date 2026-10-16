@@ -60,6 +60,9 @@ header{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:14px 24px
 #devMenu small{margin-left:auto;font:11px var(--mono);color:var(--muted);white-space:nowrap}
 #devMenu .sep{height:1px;background:var(--line);margin:4px 2px}
 .roletab .exp{font:700 9px var(--mono);letter-spacing:.1em;color:#1b1205;background:var(--amber);border-radius:3px;padding:1px 4px}
+.roletab .xb{font:700 9px var(--mono);letter-spacing:.1em;color:#05140c;background:var(--green);border-radius:3px;padding:1px 4px}
+.roletab .off{font:700 9px var(--mono);letter-spacing:.1em;color:var(--muted);border:1px solid var(--line2);border-radius:3px;padding:0 4px}
+.gsee .seg button.on.xbox{background:rgba(93,255,168,.12);color:var(--green)}
 .roletab .virt{font:700 9px var(--mono);letter-spacing:.1em;color:var(--cyan);border:1px solid rgba(70,229,255,.45);border-radius:3px;padding:0 4px}
 .gsee{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}
 .gsee[hidden]{display:none}
@@ -74,6 +77,8 @@ header{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:14px 24px
 .devrole{border:1px solid var(--line);border-radius:5px;padding:12px;margin-bottom:12px;background:rgba(8,13,18,.6)}
 .devrole h5{margin:0 0 8px;font:700 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--cyan)}
 .devrole select{width:100%}
+.devrole .padrow{display:flex;gap:8px;align-items:center;margin:6px 0;font-size:13px;cursor:pointer}
+code.nw{white-space:nowrap}
 .devrole .st{margin-top:8px;font-size:12px;color:var(--muted)}
 .devrole .st code{font:11.5px var(--mono);color:var(--text)}
 .gref{display:flex;align-items:baseline;gap:6px;font:12px var(--sans);color:var(--green);min-height:16px}
@@ -302,7 +307,7 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
   <button class="btn" id="pRen">Rename</button>
   <button class="btn danger" id="pDel">Delete</button>
   <span style="width:14px"></span>
-  <label>Buttons</label>
+  <label id="countLbl">Buttons</label>
   <div class="seg" id="count"></div>
   <span style="width:14px"></span>
   <label for="gameRef">Game defaults</label>
@@ -385,6 +390,19 @@ const ROLE_INFO = {
           axes: [["Z","Throttle"],["X","Mini-stick X"],["Y","Mini-stick Y"],["RZ","Rocker / rudder"],["SLIDER","Antenna"],["RX","Toe brake R"],["RY","Toe brake L"]],
           defaults: {Z:"ABS_Z", X:"ABS_RX", Y:"ABS_RY", RZ:"ABS_RZ"}},
 };
+// The virtual Xbox 360 pad: a third tab, fed by every stick whose "Games see" is Xbox. Its section's
+// sources are relative to the stick role (home), and it has named buttons instead of numbers.
+const XB_BUTTONS = ["A","B","X","Y","LB","RB","BACK","START","GUIDE","LS","RS","LT","RT"];
+const XB_TRIGGERS = ["LT","RT"];
+ROLE_INFO.xbox = {label: "Xbox", short: "PAD", emu: "Xbox 360 controller", emuShort: "Xbox pad", counts: [],
+  axes: [["LX","Left stick X"],["LY","Left stick Y"],["RX","Right stick X"],["RY","Right stick Y"],["LT","Left trigger"],["RT","Right trigger"]],
+  defaults: {LX:["ABS_X",null], LY:["ABS_Y",null], RX:["ABS_RZ",null], RY:[null,null], LT:["ABS_Z","low"], RT:["ABS_Z","high"]},
+  buttons: {A:1, B:2, X:3, Y:4, LB:5, RB:6, BACK:7, START:8, LS:9, RS:10}};
+const XB_NAMES = {A:"A", B:"B", X:"X", Y:"Y", LB:"LB", RB:"RB", BACK:"Back", START:"Start", GUIDE:"Guide", LS:"L-stick click", RS:"R-stick click", LT:"LT (full)", RT:"RT (full)"};
+const home = r => r === "xbox" ? "stick" : r;           // whose stick unprefixed sources mean
+const physRole = () => home(role);                        // the stick shown in "Your stick"
+const group = r => r === "xbox" ? ["xbox"] : ROLES;       // sections in which a physical control drives one output
+const modeOf = r => hello?.roles?.[r]?.mode || (hello?.roles?.[r]?.exposed ? "real" : "virtual");
 let role = "stick", layoutAll = null, readOnly = false, gameRefs = {};
 // the selected game-defaults reference for this role ({buttons, hat, axes}) or null
 const curRef = () => { const id = mapping?.profiles?.[mapping.active]?.reference; return id && gameRefs[id] ? gameRefs[id][role] : null; };
@@ -393,7 +411,7 @@ let refEdit = false, refTimer = null;
 const refEditable = () => refEdit && curRefInfo()?.origin === "user";
 // the GAME line of a card or axis: read-only text, or a text field while editing your own set
 function refField(part, key, cls = "div") {
-  const r = curRefInfo(); if (!r) return null;
+  const r = curRefInfo(); if (!r || !r[role]) return null;  // game defaults cover the Thrustmaster devices
   const text = r[role][part][key] || "";
   const d = el(cls, "gref" + (text || refEditable() ? "" : " none"));
   if (cls === "div") d.append(el("b", null, "GAME"));
@@ -429,24 +447,26 @@ function setSave(text, cls) { const s = $("#save"); s.textContent = text; s.clas
 
 const profR = r => mapping.profiles[mapping.active][r];
 const prof = () => profR(role);
-const physInfo = (r = role) => hello?.roles?.[r]?.device || null;
-const emuInfo = (r = role) => hello?.roles?.[r]?.emulated || null;
-const rawOf = (m, r = role) => m?.roles?.[r]?.raw || null;
+const physInfo = (r = physRole()) => hello?.roles?.[r]?.device || null;
+const emuInfo = (r = role) => (r === "xbox" ? hello?.xbox : hello?.roles?.[r]?.emulated) || null;
+const rawOf = (m, r = physRole()) => m?.roles?.[r]?.raw || null;
 // Sources are relative to the role whose section holds them: 5 / "hat:up" = that role's own
 // stick, "throttle:5" / "stick:hat:up" = the other stick (cross-mapping).
 function srcSplit(s, r = role) {
   if (typeof s === "string") { const m = s.match(/^(stick|throttle):(.*)$/); if (m) return [m[1], /^\d+$/.test(m[2]) ? +m[2] : m[2]]; }
-  return [r, s];
+  return [home(r), s];
 }
-const srcJoin = (pr, local, r = role) => pr === r ? local : `${pr}:${local}`;
+const srcJoin = (pr, local, r = role) => pr === home(r) ? local : `${pr}:${local}`;
 const parseSrc = str => /^\d+$/.test(str) ? +str : str;
 const localLabel = s => typeof s === "number" ? `BTN ${s}` : `HAT ${ARROW[s.slice(4)]}`;
-const srcLabel = s => { const [pr, l] = srcSplit(s); return (pr !== role ? ROLE_INFO[pr].short + " " : "") + localLabel(l); };
+const srcLabel = s => { const [pr, l] = srcSplit(s); return (pr !== physRole() ? ROLE_INFO[pr].short + " " : "") + localLabel(l); };
 const shortDev = n => (n || "").replace(/^VKB-Sim \(C\) Alex Oz \d{4}\s+/, "").trim();
 const outKeys = p => [...Object.keys(p.buttons).map(k => ["b", k]), ...HATS.map(([d]) => ["h", d])];
 const outList = (p, kind, key) => kind === "b" ? (p.buttons[key] ||= []) : (p.hat[key] ||= []);
-const outName = (kind, key) => kind === "b" ? `B${key}` : `HAT ${ARROW[key]}`;
-const outNameR = (r, kind, key) => (r !== role ? ROLE_INFO[r].emuShort + " " : "") + outName(kind, key);
+const outNameFor = (r, kind, key) => kind === "b" ? (r === "xbox" ? key : `B${key}`) : `${r === "xbox" ? "D-PAD" : "HAT"} ${ARROW[key]}`;
+const outName = (kind, key) => outNameFor(role, kind, key);
+const outNameR = (r, kind, key) => (r !== role ? ROLE_INFO[r].emuShort + " " : "") + outNameFor(r, kind, key);
+const bitOf = key => role === "xbox" ? XB_BUTTONS.indexOf(key) + 1 : +key;  // card key -> bit in out.b
 
 function scheduleSave() {
   if (readOnly) { setSave("not saved: restart HOTAS Mapper", "err"); return; }
@@ -464,6 +484,7 @@ function renderProfileBar() {
   const sel = $("#profile"); sel.textContent = "";
   for (const name of Object.keys(mapping.profiles)) { const o = el("option", null, name); o.value = name; o.selected = name === mapping.active; sel.append(o); }
   const seg = $("#count"); seg.textContent = "";
+  seg.hidden = $("#countLbl").hidden = role === "xbox";  // the pad has a fixed set of buttons
   for (const n of ROLE_INFO[role].counts) { const b = el("button", n === prof().button_count ? "on" : "", String(n)); b.dataset.n = n; seg.append(b); }
   const gr = $("#gameRef"); gr.textContent = "";
   const cur = mapping.profiles[mapping.active].reference || "";
@@ -477,8 +498,8 @@ function renderEmuAxes() {
   const box = $("#emuAxes"); box.textContent = ""; refs.emuAx = {};
   // own stick's axes, then the other stick's (cross-mapping)
   const physAxes = [];
-  for (const r of [role, otherRole(role)]) for (const a of physInfo(r)?.axes || []) physAxes.push(srcJoin(r, a.name));
-  const axLabel = n => { const [pr, a] = srcSplit(n); return (pr !== role ? ROLE_INFO[pr].short + " " : "") + a.replace("ABS_", ""); };
+  for (const r of [physRole(), otherRole(physRole())]) for (const a of physInfo(r)?.axes || []) physAxes.push(srcJoin(r, a.name));
+  const axLabel = n => { const [pr, a] = srcSplit(n); return (pr !== physRole() ? ROLE_INFO[pr].short + " " : "") + a.replace("ABS_", ""); };
   for (const [ax, desc] of AXES()) {
     const cfg = prof().axes[ax];
     const row = el("div", "axc"); row.dataset.axis = ax;
@@ -492,12 +513,20 @@ function renderEmuAxes() {
     cb.onchange = () => { cfg.invert = cb.checked; scheduleSave(); };
     const dz = el("div", "dzc"); const rng = el("input"); rng.type = "range"; rng.min = 0; rng.max = 30; rng.step = 1; rng.value = cfg.deadzone;
     const dzv = el("span", null, `DZ ${cfg.deadzone}%`); dzv.style.minWidth = "52px";
-    rng.oninput = () => { cfg.deadzone = +rng.value; dzv.textContent = `DZ ${rng.value}%`; refs.emuAx[ax].dz.style.cssText = dzStyle(+rng.value); scheduleSave(); };
+    rng.oninput = () => { cfg.deadzone = +rng.value; dzv.textContent = `DZ ${rng.value}%`; const t = refs.emuAx[ax]; t.dz.style.cssText = t.zero ? `left:0;width:${rng.value}%` : dzStyle(+rng.value); scheduleSave(); };
     dz.append(dzv, rng);
     const tr = track(); tr.dz = el("div", "dz"); tr.dz.style.cssText = dzStyle(cfg.deadzone); tr.root.prepend(tr.dz);
+    if (role === "xbox" && XB_TRIGGERS.includes(ax)) { tr.zero = true; tr.dz.style.cssText = `left:0;width:${cfg.deadzone}%`; tr.root.querySelector(".mid").hidden = true; }
     const lb = el("button", "btn small", "Learn"); lb.title = "Then move the axis you want";
     lb.onclick = e => startLearn({type:"axis", axis:ax}, e);
-    row.append(nm, sel, inv, dz, tr.root, lb); box.append(row);
+    const extra = [];
+    if (role === "xbox" && XB_TRIGGERS.includes(ax)) {  // drive a trigger from half of an axis, e.g. the throttle lever over LT + RT
+      const hs = el("select"); hs.title = "Which part of the source axis drives this trigger (Invert flips which end is “back”)";
+      for (const [v, t] of [["", "Full travel"], ["low", "Back half"], ["high", "Front half"]]) { const o = el("option", null, t); o.value = v; o.selected = (cfg.half || "") === v; hs.append(o); }
+      hs.onchange = () => { cfg.half = hs.value || null; scheduleSave(); };
+      extra.push(hs);
+    }
+    row.append(nm, sel, ...extra, inv, dz, tr.root, lb); box.append(row);
     refs.emuAx[ax] = {...tr, row};
   }
 }
@@ -510,6 +539,7 @@ function track() {
 function setTrack(t, f) {
   f = Math.max(0, Math.min(1, f)); const p = f * 100;
   t.knob.style.left = p + "%";
+  if (t.zero) { t.fill.style.left = "0%"; t.fill.style.width = p + "%"; return; }  // rests at 0 (a trigger)
   t.fill.style.left = Math.min(p, 50) + "%"; t.fill.style.width = Math.abs(p - 50) + "%";
 }
 
@@ -522,23 +552,23 @@ function compass(box, store) {
 // physical button names (layout.names) and 5-way hat membership
 // physical button names and 5-way hats belong to one stick's layout section
 const physNameR = (pr, n) => (typeof n === "number" && layoutAll?.devices?.[pr]?.names?.[n]) || "";
-const physName = n => physNameR(role, n);
+const physName = n => physNameR(physRole(), n);
 function hatBadgeR(pr, n) {
   if (typeof n !== "number" || !layoutAll) return "";
   const o = clusterOfR(pr, n);
   return o ? `${o.c.name} ${CL_GLYPH[o.dir]}` : "";
 }
-const hatBadge = n => hatBadgeR(role, n);
+const hatBadge = n => hatBadgeR(physRole(), n);
 function describeSrc(s) {
   // "BTN 11 (Thumb up · Hat 2 ▲)" for toasts and tooltips
   const [pr, l] = srcSplit(s);
   const extra = [physNameR(pr, l), hatBadgeR(pr, l)].filter(Boolean).join(" · ");
   return srcLabel(s) + (extra ? ` (${extra})` : "");
 }
-async function renamePhys(n, pr = role) {
+async function renamePhys(n, pr = physRole()) {
   if (!layoutAll) { toast("Button names need the stick map. Restart HOTAS Mapper if it says an older version is running.", true); return; }
   const lay = layoutAll.devices[pr];
-  const name = await ask(`Name ${pr !== role ? ROLE_INFO[pr].label.toLowerCase() + " " : ""}button ${n}`, "Describe the physical button, e.g. “Trigger stage 1” or “Rapid-fire up”. Shared by all profiles; leave empty to clear.", physNameR(pr, n));
+  const name = await ask(`Name ${pr !== physRole() ? ROLE_INFO[pr].label.toLowerCase() + " " : ""}button ${n}`, "Describe the physical button, e.g. “Trigger stage 1” or “Rapid-fire up”. Shared by all profiles; leave empty to clear.", physNameR(pr, n));
   if (name === null) return;
   (lay.names ||= {});
   if (name.trim()) lay.names[n] = name.trim().slice(0, 32); else delete lay.names[n];
@@ -551,14 +581,14 @@ function sourceChips(list, onRemove) {
   list.forEach((s, i) => {
     const [pr, l] = srcSplit(s);
     const c = el("span", "chip"); c.dataset.src = String(s);
-    if (pr !== role) { const t = el("span", "rl", ROLE_INFO[pr].short); t.title = `On the ${ROLE_INFO[pr].label.toLowerCase()} role's stick`; c.append(t); }
+    if (pr !== physRole()) { const t = el("span", "rl", ROLE_INFO[pr].short); t.title = `On the ${ROLE_INFO[pr].label.toLowerCase()} role's stick`; c.append(t); }
     c.append(el("span", "sl", localLabel(l)));
     const nm = physNameR(pr, l), hb = hatBadgeR(pr, l);
     if (nm) c.append(el("span", "nm", nm));
     if (hb) c.append(el("span", "hb", hb));
     if (typeof l === "number") {
       c.classList.add("named-able");
-      c.title = `${pr !== role ? ROLE_INFO[pr].label + " stick b" : "B"}utton ${l}${nm ? ` “${nm}”` : ""}${hb ? `, part of ${hb}` : ""}. Click to ${nm ? "rename" : "name"} it.`;
+      c.title = `${pr !== physRole() ? ROLE_INFO[pr].label + " stick b" : "B"}utton ${l}${nm ? ` “${nm}”` : ""}${hb ? `, part of ${hb}` : ""}. Click to ${nm ? "rename" : "name"} it.`;
       c.onclick = e => { if (!e.target.closest("button")) renamePhys(l, pr); };
     }
     const x = el("button", null, "×"); x.title = "Remove"; x.onclick = () => onRemove(i);
@@ -570,7 +600,8 @@ function sourceChips(list, onRemove) {
 function card(kind, key) {
   const p = prof(), list = outList(p, kind, key), lkey = kind === "b" ? key : `hat:${key}`;
   const c = el("div", "card"); c.dataset.kind = kind; c.dataset.key = key;
-  const top = el("div", "top"); top.append(el("span", "id", kind === "b" ? `B${String(key).padStart(2, "0")}` : `HAT ${ARROW[key]}`), el("span", "led"));
+  const idText = kind === "h" ? outName(kind, key) : role === "xbox" ? XB_NAMES[key] : `B${String(key).padStart(2, "0")}`;
+  const top = el("div", "top"); top.append(el("span", "id", idText), el("span", "led"));
   const ref = curRef(), refText = ref ? (kind === "b" ? ref.buttons[key] : ref.hat[key]) : null;
   const gl = refField(kind === "b" ? "buttons" : "hat", key);
   const lab = el("input", "label"); lab.placeholder = refText ? "your note (optional)" : "what does it do in-game?"; lab.maxLength = 48; lab.value = p.labels[lkey] || "";
@@ -579,7 +610,7 @@ function card(kind, key) {
   const acts = el("div", "acts");
   const a = el("button", "btn small", "Assign"); a.onclick = e => startLearn({type:"out", kind, key}, e);
   acts.append(a);
-  if (kind === "b") { const t = el("button", "btn small", "Test"); t.title = "Press this button in-game for a moment"; t.onclick = () => pulse(+key); acts.append(t); }
+  if (kind === "b") { const t = el("button", "btn small", "Test"); t.title = "Press this button in-game for a moment"; t.onclick = () => pulse(role === "xbox" ? key : +key); acts.append(t); }
   c.append(top, ...(gl ? [gl] : []), lab, chips, acts);
   c.onmouseenter = () => cardHighlight(kind, key, true);
   c.onmouseleave = () => cardHighlight(kind, key, false);
@@ -588,7 +619,8 @@ function card(kind, key) {
 
 function renderOutputs() {
   const p = prof(), box = $("#cards"); box.textContent = ""; refs.cards = {};
-  for (let n = 1; n <= p.button_count; n++) { const c = card("b", String(n)); refs.cards[n] = c; box.append(c); }
+  const keys = role === "xbox" ? XB_BUTTONS : Array.from({length: p.button_count}, (_, i) => String(i + 1));
+  for (const k of keys) { const c = card("b", k); refs.cards[k] = c; box.append(c); }
   const hb = $("#hatCards"); hb.textContent = ""; refs.hatCards = {};
   for (const [d] of HATS) { const c = card("h", d); refs.hatCards[d] = c; hb.append(c); }
   renderPhysTags();
@@ -615,11 +647,11 @@ function renderPhysTags() {
   if (!mapping) return;
   // which emulated controls (of either device) each of this stick's buttons drives
   const tags = {};
-  for (const r of ROLES) { const p = profR(r);
-    for (const [kind, key] of outKeys(p)) for (const s of outList(p, kind, key)) { const [pr, l] = srcSplit(s, r); if (pr === role && typeof l === "number") (tags[l] ||= []).push(outNameR(r, kind, key)); } }
+  for (const r of group(role)) { const p = profR(r);
+    for (const [kind, key] of outKeys(p)) for (const s of outList(p, kind, key)) { const [pr, l] = srcSplit(s, r); if (pr === physRole() && typeof l === "number") (tags[l] ||= []).push(outNameR(r, kind, key)); } }
   refs.pb.forEach((b, i) => { if (!b) return; const t = tags[i] || []; b.lastChild.textContent = t.length ? "→" + t.join(",") : ""; b.classList.toggle("mapped", t.length > 0);
     const nm = physName(i), hb = hatBadge(i); b.classList.toggle("named", !!nm);
-    const st = (prof().stages || []).find(s => s.first === i || s.second === i);
+    const st = (profR(physRole()).stages || []).find(s => s.first === i || s.second === i);
     const sn = st ? (st.first === i ? ` Stage 1 of a two-stage trigger: released while button ${st.second} is held.` : ` Stage 2 of a two-stage trigger (button ${st.first} is stage 1).`) : "";
     b.title = `Button ${i}` + (nm ? ` “${nm}”` : "") + (hb ? ` (${hb})` : "") + (t.length ? `: drives ${t.join(", ")}` : ": not used") + "." + sn + " Double-click to name it."; });
 }
@@ -627,7 +659,7 @@ function renderPhysTags() {
 function renderStages() {
   // physical two-stage triggers of this role's stick: stage 1 lets go while stage 2 is held (daemon side)
   const box = $("#stages"); box.textContent = "";
-  const p = prof(), list = (p.stages ||= []), dev = physInfo(), n = Math.max(dev ? dev.buttons : 32, ...list.flatMap(s => [s.first, s.second]));
+  const p = profR(physRole()), list = (p.stages ||= []), dev = physInfo(), n = Math.max(dev ? dev.buttons : 32, ...list.flatMap(s => [s.first, s.second]));
   const pick = (val, set) => { const s = el("select"); s.disabled = readOnly;
     for (let i = 1; i <= n; i++) { const o = el("option", null, `B${i}` + (physName(i) ? ` · ${physName(i)}` : "")); o.value = i; s.append(o); }
     s.value = val; s.onchange = () => set(+s.value); return s; };
@@ -661,7 +693,7 @@ function setRole(r) {
   if (r === role) return;
   if (learn) stopLearn();
   placing = null; wizard = null;
-  role = r; layout = layoutAll ? layoutAll.devices[r] : null; viewId = null;
+  role = r; layout = layoutAll ? layoutAll.devices[home(r)] : null; viewId = null;
   renderAll();
   if (live) onState(live);  // paint the last known state; new states only come when something moves
 }
@@ -678,28 +710,57 @@ function renderRoleTabs() {
     const ed = el("span", "dev emu", info?.emulated?.name || ROLE_INFO[r].emu);
     b.append(pd, el("span", "arrow"), ed);
     if (info?.selector != null) {  // what games see for this role
-      const x = info.exposed ? el("span", "exp", "REAL") : el("span", "virt", "VIRTUAL");
-      x.title = info.exposed ? "Games see the real stick; the emulated device is removed" : `Games see the virtual ${ROLE_INFO[r].emuShort}; the real stick is hidden`;
+      const md = modeOf(r);
+      const x = md === "real" ? el("span", "exp", "REAL") : md === "xbox" ? el("span", "xb", "XBOX") : el("span", "virt", "VIRTUAL");
+      x.title = md === "real" ? "Games see the real stick; the emulated device is removed"
+              : md === "xbox" ? "This stick feeds the virtual Xbox controller (Xbox tab); the real stick is hidden"
+              : `Games see the virtual ${ROLE_INFO[r].emuShort}; the real stick is hidden`;
       b.append(x);
     }
     b.title = `Edit the ${ROLE_INFO[r].emuShort} mapping`;
     b.onclick = () => setRole(r); box.append(b);
   }
+  // the Xbox pad: fed by the sticks set to Xbox
+  const pad = hello?.xbox, feeders = ROLES.filter(r => hello?.roles?.[r]?.selector != null && modeOf(r) === "xbox");
+  const b = el("button", "roletab" + (role === "xbox" ? " on" : "") + (feeders.length ? "" : " unset"));
+  b.append(el("span", "role", "Xbox"));
+  const fd = el("span", "dev" + (pad ? " phys" : ""), !hello ? "…" : !pad ? "daemon too old" : feeders.length ? feeders.map(r => shortDev(hello.roles[r].device?.name) || ROLE_INFO[r].label).join(" + ") : "no stick set to Xbox");
+  if (pad) { fd.title = "Click to choose which sticks feed the Xbox controller"; fd.onclick = e => { e.stopPropagation(); openPadMenu(fd); }; }
+  b.append(fd, el("span", "arrow"), el("span", "dev emu", "Xbox 360 controller"));
+  if (pad) { const x = pad.active ? el("span", "xb", "ACTIVE") : el("span", "off", "OFF"); x.title = pad.active ? "Games see the virtual Xbox controller" : "No stick is set to Xbox, so games don't see the pad"; b.append(x); }
+  b.title = "Edit the Xbox controller mapping (for games that support pads but not flight sticks)";
+  b.onclick = () => setRole("xbox"); box.append(b);
 }
 function renderBanners() {
   const info = hello?.roles?.[role], L = ROLE_INFO[role], pb = $("#physBanner"), eb = $("#emuBanner");
-  $("#physTitle").textContent = role === "stick" ? "Your stick" : "Your throttle stick";
+  $("#physTitle").textContent = physRole() === "stick" ? "Your stick" : "Your throttle stick";
   $("#emuTitle").textContent = `What the game sees · ${L.emuShort}`;
-  $("#emuSub").textContent = `The emulated ${L.emu}.`;
+  $("#emuSub").textContent = role === "xbox" ? "The virtual Xbox 360 controller, for games that support pads but not flight sticks. Both sticks can feed it." : `The emulated ${L.emu}.`;
   pb.hidden = eb.hidden = true; pb.textContent = eb.textContent = "";
-  const gs = $("#gsee"); gs.replaceChildren(); gs.hidden = true;
+  const gs = $("#gsee"); gs.replaceChildren(); gs.hidden = true; gs.style.flexDirection = gs.style.alignItems = "";
+  if (role === "xbox") { renderXboxBanners(pb, eb, gs); return; }
   if (!info) return;
   if (info.selector != null) { gs.replaceChildren(...exposeSwitch(role).childNodes); gs.hidden = false; }
   const code = t => { const c = el("code", null, t); return c; };
   if (info.selector == null) { pb.append(`No real stick feeds the ${L.emuShort}. Pick one in `, el("b", null, "Devices"), " (you can still prepare its mapping)."); pb.hidden = false; }
   else if (info.exposed) { pb.append("Games see this real stick as it is, and the emulated ", L.emuShort, " is removed. Switch back with ", el("b", null, `Virtual ${L.emuShort}`), " above (or ", code(`vkb-mapper --hide ${role}`), ")."); pb.hidden = false; }
   else if (!info.device) { pb.append(`Not connected (${info.selector || "any VKB stick"}). Plug it in; it's picked up automatically.`); pb.hidden = false; }
+  if (info.mode === "xbox") { pb.append("This stick feeds the virtual Xbox controller, so games don't see the ", L.emuShort, ". Edit the pad's mapping in the ", el("b", null, "Xbox"), " tab."); pb.hidden = false; }
   if (!info.emulated?.active && info.selector != null) { eb.append(`Games don't see a ${L.emuShort} right now. Changes are saved and apply once it's active.`); eb.hidden = false; }
+}
+function renderXboxBanners(pb, eb, gs) {
+  if (!hello) return;
+  if (!hello.xbox) { eb.append("The vkb-hotas service is an older version without the Xbox controller: reinstall it (sudo ./install.sh)."); eb.hidden = false; return; }
+  // one "Games see" switch per configured stick, so the pad can be turned on right here
+  const used = ROLES.filter(r => hello.roles[r].selector != null);
+  gs.append(...used.map(r => exposeSwitch(r, true)));
+  gs.hidden = !used.length; gs.style.flexDirection = "column"; gs.style.alignItems = "flex-start";
+  const feeders = used.filter(r => modeOf(r) === "xbox");
+  const info = hello.roles[physRole()];
+  if (!feeders.length) { eb.append("Games don't see the Xbox controller: no stick is set to ", el("b", null, "Xbox pad"), " above (or ", el("code", null, "vkb-mapper --xbox stick"), "). You can prepare the mapping anyway."); eb.hidden = false; }
+  else if (!hello.xbox.active) { eb.append("The Xbox controller appears once a stick set to Xbox is connected."); eb.hidden = false; }
+  if (info?.selector != null && modeOf(physRole()) !== "xbox" && feeders.length) { pb.append("This stick isn't set to Xbox, so its controls don't reach the pad (only sticks set to Xbox do)."); pb.hidden = false; }
+  else if (!info?.device) { pb.append("Not connected. Controls of the throttle stick (THR) can still be assigned when it is."); pb.hidden = false; }
 }
 function renderDevices() {
   const body = $("#devBody"); body.textContent = "";
@@ -723,33 +784,37 @@ function renderDevices() {
     else {
       const sw = exposeSwitch(r); sw.style.margin = "0";
       st.append(sw);
-      st.append(el("div", null, "")); st.lastChild.append("Also from a terminal: ", el("code", null, `vkb-mapper --${info.exposed ? "hide" : "expose"} ${r}`));
+      const cmd = modeOf(r) === "virtual" ? ["xbox", "expose"] : ["hide"];
+      st.append(el("div", null, "")); st.lastChild.append("Also from a terminal: ", ...cmd.flatMap((c, i) => [...(i ? [" or "] : []), el("code", "nw", `vkb-mapper --${c} ${r}`)]));
     }
     box.append(st); body.append(box);
   }
+  body.append(padDevices());
   body.append(el("p", "hint", "The choice is saved for the service. Sticks with identical ids are told apart by USB port (the part after @)."));
 }
-// "Games see: virtual | real" switch for a role (the daemon's expose command)
-function exposeSwitch(r) {
-  const info = hello?.roles?.[r], L = ROLE_INFO[r], box = el("div", "gsee");
-  box.append(el("label", null, "Games see"));
+// "Games see: virtual | Xbox pad | real" switch for a role (the daemon's mode command)
+function exposeSwitch(r, named) {
+  const L = ROLE_INFO[r], cur = modeOf(r), box = el("div", "gsee");
+  box.append(el("label", null, named ? `${L.label}: games see` : "Games see"));
   const seg = el("div", "seg");
-  for (const [on, text] of [[false, `Virtual ${L.emuShort}`], [true, "Real stick"]]) {
-    const b = el("button", (!!info?.exposed === on ? "on" : "") + (on ? " real" : ""), text);
-    b.title = on ? "Give games the real stick as it is: not grabbed or hidden; the virtual device is removed"
-                 : `Hide the real stick and give games the virtual ${L.emu}`;
-    b.onclick = () => { if (!!info?.exposed !== on) setExposed(r, on, seg); };
+  for (const [md, text] of [["virtual", `Virtual ${L.emuShort}`], ["xbox", "Xbox pad"], ["real", "Real stick"]]) {
+    const b = el("button", (cur === md ? "on " : "") + md, text);
+    b.title = md === "real" ? "Give games the real stick as it is: not grabbed or hidden; the virtual device is removed"
+            : md === "xbox" ? "Hide the real stick and make it feed the virtual Xbox 360 controller (Xbox tab), for games that support pads but not flight sticks"
+            : `Hide the real stick and give games the virtual ${L.emu}`;
+    b.onclick = () => { if (cur !== md) setMode(r, md, seg); };
     seg.append(b);
   }
-  box.append(seg, el("span", "hint", "Restart a running game to pick up a change."));
+  box.append(seg);
+  if (!named) box.append(el("span", "hint", "Restart a running game to pick up a change."));
   return box;
 }
-async function setExposed(r, on, seg) {
+async function setMode(r, mode, seg) {
   const L = ROLE_INFO[r];
   if (seg) for (const b of seg.children) b.disabled = true;
   try {
-    await api("POST", "/api/expose", {role: r, on});
-    toast(on ? `${L.label}: games now see the real stick` : `${L.label}: games now see the virtual ${L.emuShort}`);
+    await api("POST", "/api/mode", {role: r, mode});
+    toast(`${L.label}: games now see ` + {real: "the real stick", xbox: "the virtual Xbox controller", virtual: `the virtual ${L.emuShort}`}[mode]);
   } catch (e) { toast("Not changed: " + e.message, true); if (seg) for (const b of seg.children) b.disabled = false; }
 }
 async function selectDevice(r, device, label) {
@@ -791,6 +856,79 @@ function openDevMenu(r, anchor) {
   menu.style.top = (a.bottom + 6) + "px";
   menu.style.left = Math.max(8, Math.min(a.left, innerWidth - menu.offsetWidth - 8)) + "px";
 }
+// Devices dialog: the Xbox controller and the sticks feeding it (same switches as openPadMenu)
+function padDevices() {
+  const box = el("div", "devrole");
+  box.append(el("h5", null, "Xbox controller → Xbox 360 controller"));
+  if (!hello.xbox) { box.append(el("div", "st", "The vkb-hotas service is an older version: reinstall it (sudo ./install.sh).")); return box; }
+  const used = ROLES.filter(r => hello.roles[r].selector != null);
+  box.append(el("div", "st", hello.xbox.active ? "Games see the Xbox controller. Fed by:" : "Off: games don't see it. Tick a stick to make it feed the pad:"));
+  for (const r of used) {
+    const info = hello.roles[r], L = ROLE_INFO[r], md = modeOf(r);
+    const row = el("label", "padrow"), cb = el("input"); cb.type = "checkbox"; cb.checked = md === "xbox";
+    cb.onchange = async () => { cb.checked = md === "xbox"; await pickPadStick(r); };  // shows the box again until the daemon confirms
+    const now = md === "xbox" ? "" : md === "real" ? " · games see the real stick" : ` · now the ${L.emuShort}`;
+    row.append(cb, el("span", null, `${L.label}: ${shortDev(info.device?.name) || info.selector || "any VKB stick"}${now}`));
+    box.append(row);
+  }
+  if (hello.roles.throttle.selector == null)  // like openPadMenu: an unused stick can join as the throttle stick
+    for (const d of hello.devices.filter(d => !d.role && !ROLES.some(r => hello.roles[r].selector === d.selector))) {
+      const row = el("label", "padrow"), cb = el("input"); cb.type = "checkbox";
+      cb.onchange = async () => { cb.checked = false; await pickNewPadStick(d); };
+      row.append(cb, el("span", null, `${shortDev(d.name)} · not used, becomes the throttle stick`)); box.append(row);
+    }
+  const t = el("div", "st"); t.append("Also from a terminal: ", el("code", "nw", "vkb-mapper --xbox stick"), " · ", el("code", "nw", "--hide"), " to undo");
+  box.append(t);
+  return box;
+}
+// picker under the Xbox tab's source name: which sticks feed the pad (each is a role switched to Xbox mode)
+function openPadMenu(anchor) {
+  const menu = $("#devMenu");
+  if (!menu.hidden && menu.dataset.role === "xbox") { closeDevMenu(); return; }
+  menu.textContent = ""; menu.dataset.role = "xbox";
+  const item = (label, note, cur, onPick) => {
+    const b = el("button", cur ? "cur" : ""); b.setAttribute("role", "menuitemcheckbox");
+    b.append(el("span", "mk", cur ? "●" : ""), label); if (note) b.append(el("small", null, note));
+    b.disabled = !onPick; if (onPick) b.onclick = () => { closeDevMenu(); onPick(); };
+    menu.append(b);
+  };
+  menu.append(el("div", "hd", "Sticks that feed the Xbox controller"));
+  for (const r of ROLES) {
+    const info = hello.roles[r], L = ROLE_INFO[r]; if (info.selector == null) continue;
+    const md = modeOf(r), name = info.device ? shortDev(info.device.name) : `${info.selector || "any VKB stick"} · not connected`;
+    const note = md === "xbox" ? `${L.label} · feeds the pad (click to stop)` : md === "real" ? `${L.label} · games see the real stick` : `${L.label} · now the ${L.emuShort}`;
+    item(name, note, md === "xbox", () => pickPadStick(r));
+  }
+  // a connected stick no role uses can feed the pad as the throttle role, if that's free
+  const free = hello.roles.throttle.selector == null;
+  for (const d of hello.devices.filter(d => !d.role && !ROLES.some(r => hello.roles[r].selector === d.selector)))
+    item(shortDev(d.name), free ? "not used · becomes the throttle stick" : "not used · both roles taken (change them in Devices)", false, free ? () => pickNewPadStick(d) : null);
+  if (!hello.devices.length) menu.append(el("div", "hd", "No joysticks connected"));
+  menu.append(el("div", "sep"));
+  const more = el("button", null); more.append(el("span", "mk", ""), "Devices…"); more.append(el("small", null, "status, all modes"));
+  more.onclick = () => { closeDevMenu(); renderDevices(); $("#devModal").hidden = false; }; menu.append(more);
+  menu.hidden = false;
+  const a = anchor.getBoundingClientRect();
+  menu.style.top = (a.bottom + 6) + "px";
+  menu.style.left = Math.max(8, Math.min(a.left, innerWidth - menu.offsetWidth - 8)) + "px";
+}
+async function pickPadStick(r) {
+  const L = ROLE_INFO[r], md = modeOf(r), name = shortDev(hello.roles[r].device?.name) || `The ${L.label.toLowerCase()} stick`;
+  if (md === "xbox") {
+    const last = ROLES.filter(x => hello.roles[x].selector != null && modeOf(x) === "xbox").length === 1;
+    if (!await ask("Stop feeding the Xbox controller?", `${name} goes back to being the virtual ${L.emu}.` + (last ? " No stick will feed the pad any more, so games stop seeing it." : "") + " Restart a running game to pick up the change.", "", false, `Back to ${L.emuShort}`)) return;
+    return setMode(r, "virtual");
+  }
+  const now = md === "real" ? "is given to games as the real stick" : `is currently used for the virtual ${L.emu}`;
+  const after = md === "real" ? "games will see the Xbox controller instead of the real stick" : `games will see the Xbox controller instead, and no longer the ${L.emuShort}`;
+  if (!await ask("Switch to Xbox mode?", `${name} ${now}. Selecting it switches it to Xbox mode: ${after}. Its ${L.emuShort} mapping is kept for when you switch back. Restart a running game to pick up the change.`, "", false, "Switch to Xbox")) return;
+  setMode(r, "xbox");
+}
+async function pickNewPadStick(d) {
+  // mode first, so the stick attaches straight to the pad (no TWCS Throttle appearing in between)
+  await setMode("throttle", "xbox");
+  await selectDevice("throttle", d.selector, shortDev(d.name));
+}
 function closeDevMenu() { $("#devMenu").hidden = true; }
 document.addEventListener("click", e => { if (!$("#devMenu").hidden && !e.target.closest("#devMenu")) closeDevMenu(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeDevMenu(); });
@@ -802,7 +940,7 @@ $("#devClose").onclick = () => { $("#devModal").hidden = true; };
 function onState(m) {
   if (!m.roles) return;  // an older daemon
   live = m;
-  const raw = rawOf(m) || {b: [], h: [0, 0], a: {}}, out = m.roles[role].out;
+  const raw = rawOf(m) || {b: [], h: [0, 0], a: {}}, out = (role === "xbox" ? m.xbox?.out : m.roles[role].out) || {b: 0, h: 8, a: {}};
   const pressed = new Set(raw.b);
   refs.pb.forEach((b, i) => b && b.classList.toggle("on", pressed.has(i)));
   for (const [name, r] of Object.entries(refs.physAx)) { const v = raw.a[name]; if (v == null) continue; setTrack(r, (v - r.min) / ((r.max - r.min) || 1)); r.v.textContent = v; }
@@ -811,9 +949,9 @@ function onState(m) {
   m = {...m, out};
   const [ox, oy] = m.out.h < 8 ? HATVAL[m.out.h] : [0, 0];
   for (const [k, s] of Object.entries(refs.emuHat)) s.classList.toggle("on", hatOn(k, ox, oy));
-  for (const [n, c] of Object.entries(refs.cards)) c.classList.toggle("on", !!(m.out.b & (1 << (n - 1))));
+  for (const [n, c] of Object.entries(refs.cards)) c.classList.toggle("on", !!(m.out.b & (1 << (bitOf(n) - 1))));
   for (const [d, c] of Object.entries(refs.hatCards)) c.classList.toggle("on", hatOn(d, ox, oy));
-  if (emuInfo()) for (const [ax, r] of Object.entries(refs.emuAx)) setTrack(r, m.out.a[ax] / (emuInfo().axes[ax] || 1));
+  if (emuInfo()) for (const [ax, r] of Object.entries(refs.emuAx)) if (m.out.a[ax] != null) setTrack(r, m.out.a[ax] / (emuInfo().axes[ax] || 1));
   document.querySelectorAll(".chip").forEach(c => {
     const [pr, l] = srcSplit(parseSrc(c.dataset.src)), rr = rawOf(m, pr);
     c.classList.toggle("on", !!rr && (typeof l === "number" ? rr.b.includes(l) : hatOn(l.slice(4), rr.h[0], rr.h[1])));
@@ -865,7 +1003,7 @@ function detectLearn(m) {
     return;
   }
   let src = null;
-  for (const r of [role, otherRole(role)]) {
+  for (const r of [physRole(), otherRole(physRole())]) {
     const raw = now[r], base = learn.base[r]; if (!raw || !base) continue;
     let s = raw.b.find(b => !base.b.includes(b));
     if (s == null) {
@@ -879,9 +1017,9 @@ function detectLearn(m) {
   assign(learn.kind, learn.key, src, learn.add); stopLearn();
 }
 function assign(kind, key, src, add) {
-  // a physical control drives one emulated control: take it off every other slot, on both devices
+  // a physical control drives one emulated control: take it off every other slot, on both Thrustmaster devices
   const [pr, pl] = srcSplit(src), moved = [];
-  for (const r of ROLES) {
+  for (const r of group(role)) {  // the pad's mapping is separate from the Thrustmaster devices'
     const p2 = profR(r);
     for (const [k2, key2] of outKeys(p2)) {
       if (r === role && k2 === kind && key2 === key) continue;
@@ -900,9 +1038,9 @@ async function pulse(n) {
 }
 
 // ---------- profiles ----------
-function ask(title, text, value, withInput = true) {
+function ask(title, text, value, withInput = true, okText = "OK") {
   return new Promise(res => {
-    $("#mTitle").textContent = title; $("#mText").textContent = text;
+    $("#mTitle").textContent = title; $("#mText").textContent = text; $("#mOk").textContent = okText;
     const inp = $("#mInput"); inp.hidden = !withInput; inp.value = value || "";
     $("#modal").hidden = false; if (withInput) { inp.focus(); inp.select(); } else $("#mOk").focus();
     const done = v => { $("#modal").hidden = true; $("#mOk").onclick = $("#mCancel").onclick = inp.onkeydown = null; res(v); };
@@ -918,7 +1056,14 @@ function freshRole(r, count) {
   for (const [d] of HATS) p.hat[d] = [`hat:${d}`];
   return p;
 }
-const freshProfile = () => ({stick: freshRole("stick", profR("stick").button_count), throttle: freshRole("throttle", profR("throttle").button_count)});
+function freshXbox() {
+  const X = ROLE_INFO.xbox, p = {axes: {}, buttons: {}, hat: {}, labels: {}};
+  for (const [ax, [src, half]] of Object.entries(X.defaults)) p.axes[ax] = {src, invert: false, deadzone: 0, half};
+  for (const b of XB_BUTTONS) p.buttons[b] = X.buttons[b] ? [X.buttons[b]] : [];
+  for (const [d] of HATS) p.hat[d] = [`hat:${d}`];
+  return p;
+}
+const freshProfile = () => ({stick: freshRole("stick", profR("stick").button_count), throttle: freshRole("throttle", profR("throttle").button_count), xbox: freshXbox()});
 function validName(n) {
   if (!n) return false;
   if (n.length > 40) { toast("Names can be up to 40 characters", true); return false; }
@@ -1183,11 +1328,11 @@ const pinLabel = key => key === "hat" ? "✥" : key;
 function reverseMap() {
   // this stick's physical source -> [{name, label}] of emulated outputs (either device) it drives
   const rev = {};
-  for (const r of ROLES) {
+  for (const r of group(role)) {
     const p = profR(r);
     for (const [kind, key] of outKeys(p)) {
       const lkey = kind === "b" ? key : `hat:${key}`;
-      for (const s of outList(p, kind, key)) { const [pr, l] = srcSplit(s, r); if (pr === role) (rev[String(l)] ||= []).push({name: outNameR(r, kind, key), label: p.labels[lkey] || ""}); }
+      for (const s of outList(p, kind, key)) { const [pr, l] = srcSplit(s, r); if (pr === physRole()) (rev[String(l)] ||= []).push({name: outNameR(r, kind, key), label: p.labels[lkey] || ""}); }
     }
   }
   return rev;
@@ -1267,14 +1412,14 @@ function hideTip() { $("#tip").hidden = true; }
 function crossHighlight(key, on) {
   const p = prof();
   for (const [kind, k] of outKeys(p)) {
-    const hit = outList(p, kind, k).some(s => { const [pr, l] = srcSplit(s); return pr === role && (key === "hat" ? String(l).startsWith("hat:") : String(l) === key); });
+    const hit = outList(p, kind, k).some(s => { const [pr, l] = srcSplit(s); return pr === physRole() && (key === "hat" ? String(l).startsWith("hat:") : String(l) === key); });
     const c = kind === "b" ? refs.cards[k] : refs.hatCards[k];
     if (c) c.classList.toggle("xhl", on && hit);
   }
 }
 function cardHighlight(kind, key, on) {
   for (const s0 of outList(prof(), kind, key)) {
-    const [pr, s] = srcSplit(s0); if (pr !== role) continue;
+    const [pr, s] = srcSplit(s0); if (pr !== physRole()) continue;
     const pin = refs.pins?.[String(s).startsWith("hat:") ? "hat" : String(s)]; if (pin) pin.classList.toggle("xhl", on);
     const seg = refs.segs?.[s]; if (seg) seg.classList.toggle("xhl", on);
   }
@@ -1339,7 +1484,7 @@ $("#photoBtn").onclick = () => $("#photoFile").click();
 $("#photoFile").onchange = async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   try {
-    const r = await fetch(`/api/image?view=${encodeURIComponent(curView().id)}&role=${role}`, {method: "POST", headers: {"X-Token": TOKEN, "Content-Type": f.type || "application/octet-stream"}, body: f});
+    const r = await fetch(`/api/image?view=${encodeURIComponent(curView().id)}&role=${physRole()}`, {method: "POST", headers: {"X-Token": TOKEN, "Content-Type": f.type || "application/octet-stream"}, body: f});
     const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText);
     curView().image = j.image; await saveLayout(true); renderMap();
     toast("Photo added. Photos keep their own pins: place them with “Place pins”. “Use drawing” brings back the drawing's pins.");
@@ -1365,7 +1510,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && wizard) st
 const zoomByView = {};
 let panState = null, suppressClick = false;
 const Z_MIN = 1, Z_MAX = 8;
-function zstate() { return zoomByView[role + ":" + viewId] ||= {z: 1, tx: 0, ty: 0}; }
+function zstate() { return zoomByView[physRole() + ":" + viewId] ||= {z: 1, tx: 0, ty: 0}; }
 function clampZoom(zs) {
   const cv = $("#canvas"), W = cv.offsetWidth, H = cv.offsetHeight;
   zs.z = Math.max(Z_MIN, Math.min(Z_MAX, zs.z));
@@ -1397,7 +1542,7 @@ $("#stage").addEventListener("wheel", e => {
 }, {passive: false});
 $("#zIn").onclick = () => zoomAt(...stageCenter(), 1.5);
 $("#zOut").onclick = () => zoomAt(...stageCenter(), 1 / 1.5);
-$("#zFit").onclick = () => { zoomByView[role + ":" + viewId] = {z: 1, tx: 0, ty: 0}; applyZoom(); };
+$("#zFit").onclick = () => { zoomByView[physRole() + ":" + viewId] = {z: 1, tx: 0, ty: 0}; applyZoom(); };
 $("#stage").addEventListener("pointerdown", e => {
   if (e.button !== 0 || e.target.closest(".pin, .cluster, .zoombar") || zstate().z <= 1.001) return;
   const zs = zstate(); panState = {x: e.clientX, y: e.clientY, tx: zs.tx, ty: zs.ty, moved: false, id: e.pointerId};
@@ -1425,7 +1570,7 @@ function clusterOfR(pr, n) {
   for (const c of layoutAll?.devices?.[pr]?.hats || []) for (const [d, b] of Object.entries(c.dirs)) if (b === n) return {c, dir: d};
   return null;
 }
-const clusterOf = n => clusterOfR(role, n);
+const clusterOf = n => clusterOfR(physRole(), n);
 async function startWizard() {
   if (!live) { toast("The daemon isn't running, so button presses can't be detected. Start vkb-hotas first.", true); return; }
   if (learn) stopLearn();
@@ -1530,7 +1675,7 @@ function connect() {
     if (m.t === "state") onState(m);
     else if (m.t === "hello") {
       if (!m.roles) { hello = null; live = null; setPill(false, "DAEMON OUT OF DATE"); toast("The vkb-hotas service is an older version: reinstall it (sudo ./install.sh).", true); return; }
-      const sig = h => JSON.stringify(ROLES.map(r => [h.roles[r].device?.id, h.roles[r].device?.buttons, h.roles[r].device?.axes?.length]));
+      const sig = h => JSON.stringify([...ROLES.map(r => [h.roles[r].device?.id, h.roles[r].device?.buttons, h.roles[r].device?.axes?.length]), !!h.xbox]);
       const changed = !hello || sig(hello) !== sig(m); hello = m;
       renderRoleTabs(); renderBanners(); if (!$("#devModal").hidden) renderDevices();
       setPill(true, "LIVE · " + m.profile.toUpperCase());
@@ -1552,14 +1697,14 @@ function connect() {
     const [r, l] = await Promise.all([api("GET", "/api/mapping"), api("GET", "/api/layout")]);
     try { const g = await api("GET", "/api/references"); gameRefs = g.references || {}; if (g.error) toast("Game defaults couldn't be read: " + g.error, true); } catch (e) { gameRefs = {}; }
     mapping = r.mapping;
-    if (l.api !== 15) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
+    if (l.api !== 16) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
       readOnly = true; layoutAll = layout = null;
-      for (const [k, p] of Object.entries(mapping.profiles)) if (!p.stick) mapping.profiles[k] = {stick: p, throttle: freshRole("throttle")};
+      for (const [k, p] of Object.entries(mapping.profiles)) { if (!p.stick) mapping.profiles[k] = {stick: p, throttle: freshRole("throttle")}; mapping.profiles[k].xbox ||= freshXbox(); }
       for (const sel of [".maptools", ".stage"]) document.querySelector(sel).hidden = true;
       $("#placeHint").textContent = "Stick map unavailable: restart HOTAS Mapper (an older version is still running).";
       toast("HOTAS Mapper was updated. Close this tab, wait a minute and reopen HOTAS Mapper (or restart it). Nothing is saved until then, so nothing gets lost.", true);
       setTimeout(() => toast("Restart HOTAS Mapper to make changes.", true), 6500);
-    } else { layoutAll = l.layout; layout = layoutAll.devices[role]; }
+    } else { layoutAll = l.layout; layout = layoutAll.devices[physRole()]; }
     if (l.error) toast("Stick layout couldn't be read (" + l.error + "); showing defaults.", true);
     $("#foot").textContent = `mapping file: ${r.path}` + (r.exists ? "" : " (created on first change)");
     if (r.error) toast("Existing mapping file couldn't be read (" + r.error + "); showing defaults.", true);

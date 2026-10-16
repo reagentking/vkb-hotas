@@ -29,7 +29,7 @@ api_inst=$(grep -oP '^API_VERSION = \K[0-9]+' "$lib/vkb-mapper.py" 2>/dev/null)
 echo "  API_VERSION: repo=${api_repo:-?} installed=${api_inst:-?}"
 
 echo "== config (/etc/default/vkb-hotas)"
-grep -E '^VKB_HOTAS_(DEVICE|THROTTLE|EXPOSE|USER|ARGS)=' /etc/default/vkb-hotas 2>/dev/null | sed 's/^/  /' || echo "  missing"
+grep -E '^VKB_HOTAS_(DEVICE|THROTTLE|EXPOSE|XBOX|USER|ARGS)=' /etc/default/vkb-hotas 2>/dev/null | sed 's/^/  /' || echo "  missing"
 
 echo "== running HOTAS Mapper processes"
 found=0
@@ -71,6 +71,11 @@ if os.path.exists(mp):
             print(f"    {r}: {sec['button_count']} buttons, axes {{{axes}}}"
                   + (f", {cross} sources on the other stick" if cross else "")
                   + (f", two-stage triggers {stages}" if stages else ""))
+        if "xbox" in p:
+            x = p["xbox"]
+            used = [b for b, v in x["buttons"].items() if v]
+            print(f"    xbox: axes {{{', '.join('%s: %s%s' % (k, v['src'], '/' + v['half'] if v.get('half') else '') for k, v in x['axes'].items())}}}, "
+                  f"{len(used)} buttons assigned")
     except Exception as e:
         print(f"  mapping.json INVALID: {e}")
 else:

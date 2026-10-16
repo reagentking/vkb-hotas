@@ -53,10 +53,12 @@ if not sticks:
     exit 0
 fi
 
-# uhid may be a module or built in
+# uhid (Thrustmaster devices) and uinput (Xbox controller mode) may be modules or built in
 modprobe uhid 2>/dev/null || true
+modprobe uinput 2>/dev/null || true
 [[ -c /dev/uhid ]] || die "/dev/uhid missing (kernel without CONFIG_UHID?)"
-echo uhid > /etc/modules-load.d/vkb-hotas.conf
+[[ -c /dev/uinput ]] || echo "note: /dev/uinput missing, so Xbox controller mode won't work (kernel without CONFIG_INPUT_UINPUT?)"
+printf 'uhid\nuinput\n' > /etc/modules-load.d/vkb-hotas.conf
 
 # config: keep the user's file, install the template otherwise
 [[ -e $conf ]] || install -Dm644 "$here/service/vkb-hotas.default" "$conf"

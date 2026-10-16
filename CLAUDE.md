@@ -11,7 +11,8 @@ via `/dev/uhid` as Thrustmaster devices, and hides the real ones from the user s
 **roles**: *stick* → **T.16000M (`044f:b10a`)**, required; *throttle* → **TWCS Throttle
 (`044f:b687`)**, optional (the user wants a left- and a right-hand Omni Throttle). Together they're
 Thrustmaster's T.16000M FCS HOTAS set. A browser-based GUI (HOTAS Mapper) remaps buttons and axes
-live, because AC8 has no rebinding for this stick.
+live, because AC8 has no rebinding for this stick. For games that support pads but not flight
+sticks, a role can instead feed one shared virtual **Xbox 360 controller** (uinput, `045e:028e`).
 
 **Goals:**
 1. Games see only the Thrustmaster devices, recognised as joysticks (not gamepads).
@@ -24,7 +25,10 @@ treats the T.16000M badly, the planned fallback is emulating a Logitech X56 inst
 Project Wingman (appid 895870) opens the stick and receives input once its prefix is set up with
 `proton-setup.py 895870`; controls are bound in the game's own menu. The throttle role has only been
 tested against simulated sticks: the user doesn't own the left-hand OT yet, and its product id
-(`231d:3201` in the fake daemon) is a guess.
+(`231d:3201` in the fake daemon) is a guess. Xbox mode is tested with simulated sticks; a real
+uinput pad couldn't be created from the user session before install (`/dev/uinput` gave ENODEV:
+module not loaded, and unprivileged opens don't autoload it), so SDL recognition is checked after
+install.
 
 ## Repository layout
 
@@ -123,7 +127,8 @@ dev/fake-daemon.py --unplug 1 / --plug 1    # simulate unplugging / replugging s
 role's output; it reads every role's `PhysState`, which is how cross-mapping works. `FakeStick` in
 `dev/fake-daemon.py` is a ready-made fake device: it tracks its own state for `active_keys()` /
 `absinfo()` (what `PhysState.resync` reads) and `overflow(*lost)` simulates a SYN_DROPPED. Set
-`ps.stages = {1: (2, 0.0)}` to test a two-stage trigger.
+`ps.stages = {1: (2, 0.0)}` to test a two-stage trigger. `FakePad` stands in for the uinput pad
+(`make_pad=FakePad`; it keeps the last `out`); `Daemon(..., {"stick": "xbox", ...})` takes modes.
 
 ```python
 import importlib.util
@@ -149,19 +154,21 @@ When killing test processes, select them via `/proc/<pid>/cmdline` (see Gotchas)
 ```
 real stick ─────┐                                     ┌─▶ virtual T.16000M      ─┐
                 ├─evdev (EVIOCGRAB)─▶ vkb-hotas.py ───┤                           ├─(hidraw)─▶ Wine winebus ─▶ DirectInput ─▶ game
-throttle stick ─┘                       (root)        └─▶ virtual TWCS Throttle ─┘
+throttle stick ─┘                       (root)        ├─▶ virtual TWCS Throttle ─┘
+                                                      └─▶ or: virtual Xbox 360 pad (uinput) ─(SDL)─▶ Wine winebus ─▶ XInput ─▶ game
                                    ▲            │
           ~/.config/vkb-hotas/mapping.json      └─ /run/vkb-hotas/ctl.sock (JSON lines) ◀─▶ vkb-mapper.py (user, 127.0.0.1 HTTP+SSE) ◀─▶ vkb-mapper.html
 ```
 
 **Daemon (`service/vkb-hotas.py`).** `main()` only parses arguments and builds a **`Daemon`**, whose
 single-threaded `poll()` loop serves both roles. It takes its collaborators as arguments
-(`source`, `make_uhid`, `hider`, `persist`), which is how `dev/fake-daemon.py` reuses the same loop.
+(`source`, `make_uhid`, `make_pad`, `hider`, `persist`), which is how `dev/fake-daemon.py` reuses the same loop.
 The poll set is rebuilt every iteration, because devices come and go: sticks attach/detach, and a
 virtual device is destroyed and re-created when its `button_count` changes the HID descriptor.
 
-- **`Role`** (one per role) holds the selector, `exposed`, the attached evdev device and its
-  `PhysState`, its hidden nodes, its `Mapper` and its `Uhid`.
+- **`Role`** (one per role) holds the selector, `mode` (`virtual` | `xbox` | `real`; `exposed` is
+  `mode == "real"`), the attached evdev device and its `PhysState`, its hidden nodes, its `Mapper`
+  and its `Uhid`.
 - **`PhysState`**: one real stick's raw axes, pressed button numbers and hat.
 - **`Mapper`**: one role's output. Computes that emulated device's report from the role's profile
   section and *every* role's `PhysState` (cross-mapping). `make_spec(role, n)` gives the HID
@@ -177,16 +184,29 @@ virtual device is destroyed and re-created when its `button_count` changes the H
 - **Selectors:** `VID:PID`, or `VID:PID@<port>` (the evdev `phys` minus `/inputN`) when two
   connected sticks share a VID:PID; `selector_for()` adds the port only then. A vague legacy
   selector (`""` = any VKB, vendor only) never takes a stick another role names exactly.
-- **Commands** (control socket): `hello`; `pulse {role, button}`; `select {role, device|null}`
+- **Commands** (control socket): `hello`; `pulse {role, button}` (`role: "xbox"` takes a button
+  name); `mode {role|"all", mode}`; `select {role, device|null}`
   (validated against connected sticks; picking the other role's stick swaps them; the stick role
   can't be none); `expose {role|"all", on}`. `select`/`expose` reply `{"t":"result","ok","error"}`
   to the caller only, *after* broadcasting the new `hello`, and persist to `/etc/default/vkb-hotas`
   through `write_config` (atomic, keeps other lines, refuses odd characters).
-- **Exposing** a role: ungrab, unhide, destroy its virtual device; its events are still read (live
-  view, cross-mapped sources). Persisted as `VKB_HOTAS_EXPOSE`.
-- **Messages:** `hello {roles{r: selector, exposed, device|null, emulated{name,id,buttons,axes,
-  active}}, devices[], profile, mapping, error}`; `state {roles{r: raw|null, out}}` (≤30 Hz, only
-  when something changed; `out` is computed even while exposed); `mapping`; `result`.
+- **Modes** (`set_mode`; `expose` is a wrapper): `real` = ungrab, unhide, destroy its virtual
+  device; its events are still read (live view, cross-mapped sources). `xbox` = grabbed and hidden
+  like `virtual`, but its uhid device is destroyed and it feeds the pad. Persisted by
+  `mode_config()` as `VKB_HOTAS_EXPOSE` + `VKB_HOTAS_XBOX` (EXPOSE wins if both name a role).
+- **Xbox pad:** `XboxPad` is an `evdev.UInput` with xpad's 360 layout (BTN_SOUTH…, sticks
+  ±32768 with Y up negative, triggers ABS_Z/ABS_RZ 0-255, D-pad as ABS_HAT0X/Y), name
+  "Microsoft X-Box 360 pad", `phys = UHID_PHYS` so discovery skips it. uinput, not uhid, because a
+  360 pad isn't HID; SDL recognises the VID:PID + layout and Proton's SDL backend makes it XInput.
+  `XboxMapper` computes it from the profile's `xbox` section using `pad_phys()`, i.e. **only sticks
+  in xbox mode** (so no stick drives two visible devices); axis values are 0..top (sticks centred
+  at 32768), `XboxPad.send` makes them signed and writes only changes. `_update_pad()`: created when
+  an xbox-mode stick attaches, kept while it's unplugged, dropped when no configured role is in xbox
+  mode; on OSError it runs `modprobe uinput` once and retries.
+- **Messages:** `hello {roles{r: selector, exposed, mode, device|null, emulated{name,id,buttons,axes,
+  active}}, xbox{name,id,active,buttons,axes}, devices[], profile, mapping, error}`; `state {roles{r:
+  raw|null, out}, xbox{out}}` (≤30 Hz, only when something changed; `out` is computed even while
+  inactive; the pad's `out.b` is a mask over `XBOX_BUTTONS`); `mapping`; `result`.
 - **`MappingWatcher`** polls `mapping.json` every 0.5 s (inode, mtime, size). As root it refuses
   symlinks, non-regular files and files not owned by `VKB_HOTAS_USER`. When the file is missing, it
   falls back to a profile built from the CLI args in `VKB_HOTAS_ARGS` (stick section only).
@@ -199,15 +219,24 @@ virtual device is destroyed and re-created when its `button_count` changes the H
 - Exposing removes the virtual device and persists across restarts. It started CLI only
   (`vkb-mapper --expose/--hide`); the user later asked for it in the GUI too: a VIRTUAL/REAL badge
   per tab and a "Games see: Virtual | Real stick" switch (stick panel and Devices dialog).
+- Xbox mode: a third "Games see" choice per stick (not tied to profiles, not always-on next to the
+  T.16000M); **one shared pad** for both sticks; flight-style defaults (stick → left stick, twist →
+  right X, lever split back half LT / front half RT).
 
 **Shared model (`common/vkb_common.py`).** Owns config reading/writing (`/etc/default/vkb-hotas`:
-`VKB_HOTAS_DEVICE`, `VKB_HOTAS_THROTTLE`, `VKB_HOTAS_EXPOSE`, `VKB_HOTAS_USER`, `VKB_HOTAS_ARGS`),
+`VKB_HOTAS_DEVICE`, `VKB_HOTAS_THROTTLE`, `VKB_HOTAS_EXPOSE`, `VKB_HOTAS_XBOX`, `VKB_HOTAS_USER`,
+`VKB_HOTAS_ARGS`; `role_modes()` / `mode_config()`),
 roles and their emulated ids, axes and button counts, selectors and stick discovery, the mapping
 schema, and the terminal pickers (`checklist`, `pick_one`, used by `proton-setup.py` and
 `install.sh`). `normalize_profile` / `normalize_mapping` are the single validator used by the
 daemon, the GUI server and the checker. Change the schema there and nowhere else.
 
-- **Mapping version 2:** a profile is `{stick: SECTION, throttle: SECTION}`. A section is
+- **Mapping version 2:** a profile is `{stick: SECTION, throttle: SECTION, xbox: XBOX}` (`xbox` is
+  filled with defaults when missing, so old files load unchanged). XBOX: `axes{LX LY RX RY LT RT:
+  {src, invert, deadzone, half: null|"low"|"high"}}` (`half` = one half of the source drives the
+  whole output; trigger deadzones sit at the start of the travel), `buttons{A … RS, LT, RT:
+  [sources]}` (LT/RT buttons pull the trigger fully), `hat` (D-pad), `labels`; its sources are
+  relative to `XBOX_HOME = "stick"`. A section is
   `button_count` (stick 16|32, throttle 14|32); `axes{...: {src, invert, deadzone%}}` (stick X Y RZ
   SLIDER; throttle X Y Z RX RY RZ SLIDER); `buttons{"N": [sources]}`; `hat{up,down,left,right:
   [sources]}`; `labels`; `stages[{first, second, delay ms 0-500}]` (two-stage triggers, physical
@@ -248,16 +277,28 @@ guards, and keeps them:
 - `PUT /api/mapping` validates via `vkb_common` and writes atomically.
 - `GET|PUT /api/layout`, `POST /api/image?view=ID&role=R` (raw body), and `GET /api/image/<name>`
   (token in the query, so `<img>` works) back the stick map.
-- `POST /api/pulse {role, button}`, `POST /api/select {role, device}` and
-  `POST /api/expose {role, on}` relay to the daemon
-  (`daemon_command`, which reads `hello` first). `--status` / `--expose` / `--hide` are the same
-  relay from the command line.
+- `POST /api/pulse {role, button}` (role `xbox`: a button name), `POST /api/select {role, device}`,
+  `POST /api/mode {role, mode}` and `POST /api/expose {role, on}` relay to the daemon
+  (`daemon_command`, which reads `hello` first). `--status` / `--expose` / `--xbox` / `--hide` are
+  the same relay from the command line (`cli_mode`).
 - **The page is role-tabbed:** the header's role tabs switch both panels (that role's real stick on
   the left, its emulated device on the right); the Devices dialog and the dropdown on a tab's real-stick name (`openDevMenu`) list
   `hello.devices` per role; both go through `selectDevice()`.
   In the page, `role` is the current tab, `prof()` its section, `layout` its layout section,
   `srcSplit`/`srcJoin` convert sources, and Learn/Assign watch *both* sticks' raw state. Assigning
   takes the physical control off every slot of *both* devices.
+- **The Xbox tab** is a pseudo-role `xbox` (`ROLE_INFO.xbox`, not in `ROLES`). Its left panel is the
+  stick role's stick: `home(r)` / `physRole()` give the stick behind a tab, and every "this stick"
+  use (`physInfo`, `rawOf`, names, hats, stages, stick map, zoom, image upload, `srcSplit`/`srcJoin`)
+  goes through them. `group(role)` keeps the pad's mapping separate: Assign and tags only look at
+  `["xbox"]` there and at `ROLES` elsewhere. Cards are keyed by button name (`bitOf` gives the
+  `out.b` bit); game defaults don't cover the pad (`refField` returns null).
+  The Xbox tab's source name opens `openPadMenu` (in `#devMenu`): each configured role's stick
+  (● = feeds the pad) and unused connected sticks. `pickPadStick` confirms with `ask(…, okText)`
+  before switching a role away from its Thrustmaster device (user's request: warn when taking the
+  T.16000M's stick) or back; an unused stick becomes the throttle role via `pickNewPadStick`, which
+  sets the mode *before* selecting so no TWCS appears in between. The Devices dialog's Xbox
+  section (`padDevices`) offers the same choices as checkboxes, through the same functions.
 - The server exits 45 s after its last SSE client disconnects.
 - **Single-instance file:** `$XDG_RUNTIME_DIR/vkb-mapper/url-<hash of mapping path + socket>`. It's
   keyed so test instances never hand over to the user's real mapper. A test instance once did
@@ -279,7 +320,8 @@ guards, and keeps them:
   12 = `evo-ot-straight(-l)` drawings (an older server would replace unknown drawings on save);
   13 = game defaults (`GET /api/references`, a profile's optional `reference`);
   14 = user game defaults (`PUT`/`DELETE /api/references/u-…`); 15 = two-stage triggers (section
-  `stages`; an older server's normalizer would drop them on save).
+  `stages`; an older server's normalizer would drop them on save); 16 = Xbox controller mode (the
+  `xbox` section, `/api/mode`, `--xbox`).
 - **Two-stage triggers:** physically a full pull always passes through stage 1, so remapping alone
   can't free stage 2's button. `PhysState.active(n, now)` treats a `stages` stage-1 button as
   released while its stage-2 button is held, and (with `delay`) until held `delay` ms; the loop's
@@ -409,6 +451,13 @@ never written into Steam's `localconfig.vdf`.
 
 ## Gotchas (all hit during development)
 
+- **uinput from the user session:** `/dev/uinput` here carries an ACL for the user (Steam's udev
+  rules), but while the module isn't loaded an open gives ENODEV and doesn't autoload it. The
+  daemon (root) runs `modprobe uinput`; `install.sh` loads it and adds it to `modules-load.d`.
+- **proton-setup vs Xbox mode:** proton-setup sets winebus `Enable SDL`=0 in a prefix (needed so the
+  Thrustmaster devices go through hidraw), but SDL is what turns the uinput pad into an XInput
+  controller in Wine. Pad-only games should keep the default prefix (`proton-setup.py --undo`).
+  `vkb-check.py` warns when a log shows xbox mode with SDL disabled.
 - **Lost button releases (SYN_DROPPED).** The real stick sends ~1000 reports/s and its evdev
   client buffer holds ~128 events, so a stall of a few tens of ms overflows it. The kernel then
   discards events and sends `SYN_DROPPED`. Ignoring it left buttons held in game (user saw B1, B2,

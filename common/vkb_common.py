@@ -12,9 +12,12 @@ UHID_PHYS = "vkb-hotas/uhid"  # phys of our own virtual devices, so discovery ne
 # Each role turns one real stick into one emulated Thrustmaster device:
 #   stick    -> T.16000M (required)          config: VKB_HOTAS_DEVICE
 #   throttle -> TWCS Throttle (optional)     config: VKB_HOTAS_THROTTLE
-# A role can be "exposed" (VKB_HOTAS_EXPOSE): its real stick is given to games
-# untouched and its virtual device is removed.
+# A role's mode says what games see of its stick:
+#   "virtual" (default)  the emulated Thrustmaster device
+#   "xbox"               VKB_HOTAS_XBOX: the shared virtual Xbox 360 controller (see XBOX_*)
+#   "real"               VKB_HOTAS_EXPOSE ("exposed"): the real stick untouched, no virtual device
 ROLES = ("stick", "throttle")
+MODES = ("virtual", "xbox", "real")
 ROLE_CONFIG = {"stick": "VKB_HOTAS_DEVICE", "throttle": "VKB_HOTAS_THROTTLE"}
 EMULATED_IDS = {"stick": (0x044F, 0xB10A), "throttle": (0x044F, 0xB687)}
 EMULATED_NAMES = {"stick": "Thrustmaster T.16000M", "throttle": "Thrustmaster TWCS Throttle"}
@@ -31,6 +34,16 @@ ROLE_DEFAULT_AXES = {
 EMU_AXES = ROLE_AXES["stick"]
 DEFAULT_AXES = ROLE_DEFAULT_AXES["stick"]
 HAT_DIRS = ("up", "down", "left", "right")
+
+# The virtual Xbox 360 controller (uinput, laid out like the kernel's xpad driver), for games that
+# support pads but not flight sticks. One pad, fed by every stick in "xbox" mode. Its mapping is
+# the profile's "xbox" section; sources there are relative to the stick role.
+XBOX_ID = (0x045E, 0x028E)
+XBOX_NAME = "Microsoft X-Box 360 pad"
+XBOX_BUTTONS = ("A", "B", "X", "Y", "LB", "RB", "BACK", "START", "GUIDE", "LS", "RS", "LT", "RT")  # LT/RT: digital = fully pressed
+XBOX_AXES = ("LX", "LY", "RX", "RY", "LT", "RT")
+XBOX_TRIGGERS = ("LT", "RT")
+XBOX_HOME = "stick"  # whose stick unprefixed sources in the xbox section mean
 
 
 def read_config(path=CONFIG):
@@ -78,6 +91,20 @@ def role_selectors(cfg=None):
 def exposed_roles(cfg=None):
     cfg = read_config() if cfg is None else cfg
     return {r for r in os.environ.get("VKB_HOTAS_EXPOSE", cfg.get("VKB_HOTAS_EXPOSE", "")).split() if r in ROLES}
+
+
+def role_modes(cfg=None):
+    """{role: "virtual" | "xbox" | "real"} from VKB_HOTAS_XBOX and VKB_HOTAS_EXPOSE (EXPOSE wins)."""
+    cfg = read_config() if cfg is None else cfg
+    xbox = {r for r in os.environ.get("VKB_HOTAS_XBOX", cfg.get("VKB_HOTAS_XBOX", "")).split() if r in ROLES}
+    exposed = exposed_roles(cfg)
+    return {r: "real" if r in exposed else "xbox" if r in xbox else "virtual" for r in ROLES}
+
+
+def mode_config(modes):
+    """The config lines that store {role: mode}."""
+    return {"VKB_HOTAS_EXPOSE": " ".join(r for r in ROLES if modes[r] == "real"),
+            "VKB_HOTAS_XBOX": " ".join(r for r in ROLES if modes[r] == "xbox")}
 
 
 # ---- Source devices and selectors ----------------------------------------------
@@ -197,6 +224,9 @@ def default_match():
 #           "hat":     {"up": ["hat:up"], "down": [...], "left": [...], "right": [...]},
 #           "labels":  {"1": "Fire guns", "hat:up": "Camera"}},
 #       "throttle": {...},                           # the emulated TWCS: axes X Y Z RX RY RZ SLIDER, 14 | 32 buttons
+#       "xbox": {                                    # the virtual Xbox 360 pad (sources relative to the stick role)
+#           "axes": {"LX": {"src", "invert", "deadzone", "half": null | "low" | "high"}, ... LY RX RY LT RT},
+#           "buttons": {"A": [1], ... "LT": [], "RT": []},  "hat": {...D-pad},  "labels": {"A": "Jump"}},
 #       "reference": "ac8-default"}}                 # optional: game defaults shown in HOTAS Mapper
 # }
 # A source is a physical button number (1-based, in Linux/VKBDevCfg order) or a physical
@@ -224,10 +254,26 @@ def default_role_profile(role, button_count=None, axes=None, invert=()):
     }
 
 
+# flight-style: stick -> left stick, twist -> right stick X, lever split over the triggers
+XBOX_DEFAULT_AXES = {"LX": ("ABS_X", None), "LY": ("ABS_Y", None), "RX": ("ABS_RZ", None), "RY": (None, None),
+                     "LT": ("ABS_Z", "low"), "RT": ("ABS_Z", "high")}
+XBOX_DEFAULT_BUTTONS = {"A": 1, "B": 2, "X": 3, "Y": 4, "LB": 5, "RB": 6, "BACK": 7, "START": 8, "LS": 9, "RS": 10}
+
+
+def default_xbox_profile():
+    return {
+        "axes": {a: {"src": s, "invert": False, "deadzone": 0, "half": h} for a, (s, h) in XBOX_DEFAULT_AXES.items()},
+        "buttons": {b: [XBOX_DEFAULT_BUTTONS[b]] if b in XBOX_DEFAULT_BUTTONS else [] for b in XBOX_BUTTONS},
+        "hat": {d: [f"hat:{d}"] for d in HAT_DIRS},
+        "labels": {},
+    }
+
+
 def default_profile(button_count=None, axes=None, invert=()):
     """A whole profile; the arguments shape the stick section (they come from VKB_HOTAS_ARGS)."""
     return {"stick": default_role_profile("stick", button_count, axes, invert),
-            "throttle": default_role_profile("throttle")}
+            "throttle": default_role_profile("throttle"),
+            "xbox": default_xbox_profile()}
 
 
 def split_source(role, s):
@@ -311,6 +357,42 @@ def normalize_role_profile(role, p):
     return out
 
 
+def normalize_xbox_profile(p):
+    """Validate the xbox section (sources relative to XBOX_HOME), fill defaults, return a clean copy."""
+    if p is None:
+        return default_xbox_profile()
+    if not isinstance(p, dict):
+        raise ValueError("must be an object")
+    out = default_xbox_profile()
+    for a, cfg in (p.get("axes") or {}).items():
+        if a not in XBOX_AXES or not isinstance(cfg, dict):
+            raise ValueError(f"axes: unknown axis {a!r}")
+        dz = cfg.get("deadzone", 0)
+        if not isinstance(dz, (int, float)) or isinstance(dz, bool) or not 0 <= dz <= 50:
+            raise ValueError(f"axes.{a}.deadzone must be 0-50 (%)")
+        half = cfg.get("half")
+        if half not in (None, "low", "high"):
+            raise ValueError(f"axes.{a}.half must be null, \"low\" or \"high\"")
+        out["axes"][a] = {"src": _axis_source(XBOX_HOME, cfg.get("src"), f"axes.{a}.src"),
+                          "invert": bool(cfg.get("invert", False)), "deadzone": dz, "half": half}
+    if "buttons" in p:
+        if not isinstance(p["buttons"], dict):
+            raise ValueError("buttons must be an object")
+        for k, v in p["buttons"].items():
+            if k not in XBOX_BUTTONS:
+                raise ValueError(f"buttons: {k!r} is not an Xbox button ({', '.join(XBOX_BUTTONS)})")
+            out["buttons"][k] = _sources(XBOX_HOME, v, f"buttons.{k}")
+    if "hat" in p:
+        if not isinstance(p["hat"], dict):
+            raise ValueError("hat must be an object")
+        out["hat"] = {d: _sources(XBOX_HOME, p["hat"].get(d, []), f"hat.{d}") for d in HAT_DIRS}
+    labels = p.get("labels") or {}
+    if not isinstance(labels, dict):
+        raise ValueError("labels must be an object")
+    out["labels"] = {str(k)[:16]: str(v)[:48] for k, v in labels.items() if str(v).strip()}
+    return out
+
+
 MAX_STAGE_DELAY = 500  # ms
 
 
@@ -360,6 +442,10 @@ def normalize_profile(p):
             out[role] = normalize_role_profile(role, p.get(role))
         except ValueError as e:
             raise ValueError(f"{role}: {e}") from None
+    try:
+        out["xbox"] = normalize_xbox_profile(p.get("xbox"))
+    except ValueError as e:
+        raise ValueError(f"xbox: {e}") from None
     return out
 
 

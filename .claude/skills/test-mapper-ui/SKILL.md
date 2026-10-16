@@ -82,6 +82,17 @@ example, press a button and check `out.b` has the mapped bit set, or send
 - **Mapping:** Assign (and Shift+Assign) moves a source off other slots *on both devices*; a press
   on the other stick saves a prefixed source (`throttle:7`) and shows a `THR`/`STK` chip tag;
   cross axes in the dropdown; labels persist; Test pulses light the right device's output.
+- **Xbox mode:** the third tab shows "no stick set to Xbox" / OFF; its Games see switches (one per
+  stick) and the stick tabs' three-way switch set the mode (badge XBOX, `DIR/config` gets
+  `VKB_HOTAS_XBOX`), and the tab turns ACTIVE; cards are A…RS, LT/RT (full); LT/RT rows have a
+  Back/Front half select and their bars fill from 0; Assign on an Xbox card leaves the T.16000M
+  slot alone; the Xbox tab's source name opens a picker (configured sticks, ● on feeders, unused
+  sticks "becomes the throttle stick"): picking the T.16000M's stick shows "Switch to Xbox mode?"
+  (Cancel changes nothing), picking a feeder offers "Back to …", picking an unused stick attaches
+  it straight to the pad (the daemon log shows no TWCS Throttle line in between); Devices has an
+  "Xbox controller" section with the same choices as checkboxes (the confirm dialog opens on top); `state.xbox.out.b` follows `fake_press` on a stick in xbox mode only, and
+  `{"cmd":"pulse","role":"xbox","button":"START"}` lights bit 7. CLI: `VKB_HOTAS_CTL=…
+  mapper/vkb-mapper.py --xbox throttle / --hide all / --status`.
 - **Two-stage triggers:** + Two-stage trigger adds a row (saved as the section's `stages` in
   `DIR/mapping.json`); a duplicate stage 1 or equal buttons shows a warning and the save fails
   cleanly; Remove and the Delay box persist across reload. Behaviour: open the socket, read

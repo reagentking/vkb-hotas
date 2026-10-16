@@ -21,7 +21,10 @@ While a role is active, its real stick is:
     the uaccess tag of its event/js/hidraw nodes and they are chmod 0600
     (which zeroes the ACL mask), so newly started games only see the virtual one.
 A role can be "exposed" instead (VKB_HOTAS_EXPOSE, `vkb-mapper --expose`): its
-real stick is released to games untouched and its virtual device removed.
+real stick is released to games untouched and its virtual device removed. Or it
+can feed a virtual Xbox 360 controller (VKB_HOTAS_XBOX, `vkb-mapper --xbox`, a
+uinput device) in place of its Thrustmaster device, for games that support pads
+but not flight sticks; all sticks in that mode share one pad.
 Sticks are re-attached automatically when unplugged and plugged back in.
 
 Runs as root (uhid is root-only); normally started by udev via systemd.
@@ -47,11 +50,12 @@ from evdev import ecodes as E
 # vkb_common lives in ../common in the repo and next to this file once installed
 _here = os.path.dirname(os.path.realpath(__file__))
 sys.path[:0] = [_here, os.path.join(os.path.dirname(_here), "common")]
-from vkb_common import (CONFIG, EMULATED_IDS, EMULATED_NAMES, HAT_DIRS, ROLE_AXES, ROLE_CONFIG,  # noqa: E402
-                        ROLE_DEFAULT_AXES, ROLES, SELECTOR, UHID_PHYS, default_profile,
-                        default_role_profile, exposed_roles, list_sticks, load_mapping, mapping_path,
-                        matches, port_of, role_selectors, selector_for, split_source, vidpid,
-                        write_config)
+from vkb_common import (CONFIG, EMULATED_IDS, EMULATED_NAMES, HAT_DIRS, MODES, ROLE_AXES,  # noqa: E402
+                        ROLE_CONFIG, ROLE_DEFAULT_AXES, ROLES, SELECTOR, UHID_PHYS, XBOX_AXES,
+                        XBOX_BUTTONS, XBOX_HOME, XBOX_ID, XBOX_NAME, XBOX_TRIGGERS, default_profile,
+                        default_role_profile, default_xbox_profile, list_sticks, load_mapping,
+                        mapping_path, matches, mode_config, port_of, role_modes, role_selectors,
+                        selector_for, split_source, vidpid, write_config)
 
 # ---- uhid ABI (linux/uhid.h) -------------------------------------------------
 UHID_DESTROY = 1
@@ -185,6 +189,14 @@ def make_spec(role, n):
 # hat (x,y) -> HID hat value, 8 = null (outside logical range)
 HAT = {(0, -1): 0, (1, -1): 1, (1, 0): 2, (1, 1): 3,
        (0, 1): 4, (-1, 1): 5, (-1, 0): 6, (-1, -1): 7, (0, 0): 8}
+HAT_XY = {v: k for k, v in HAT.items()}
+
+# ---- Emulated device: Xbox 360 controller (uinput, the kernel xpad driver's layout) --------
+XBOX_KEYS = {"A": E.BTN_SOUTH, "B": E.BTN_EAST, "X": E.BTN_NORTH, "Y": E.BTN_WEST, "LB": E.BTN_TL,
+             "RB": E.BTN_TR, "BACK": E.BTN_SELECT, "START": E.BTN_START, "GUIDE": E.BTN_MODE,
+             "LS": E.BTN_THUMBL, "RS": E.BTN_THUMBR}
+XBOX_ABS = {"LX": E.ABS_X, "LY": E.ABS_Y, "RX": E.ABS_RX, "RY": E.ABS_RY, "LT": E.ABS_Z, "RT": E.ABS_RZ}
+XBOX_TOP = {a: 255 if a in XBOX_TRIGGERS else 65535 for a in XBOX_AXES}  # mapper values are 0..top
 
 
 def log(*a):
@@ -231,6 +243,43 @@ class Uhid:
             self._write(struct.pack("<I", UHID_DESTROY))
         finally:
             os.close(self.fd)
+
+
+class XboxPad:
+    """The virtual Xbox 360 controller. SDL, Steam and Proton recognise 045e:028e with xpad's
+    layout as an Xbox controller, and Proton gives it to games through XInput. A pad isn't a
+    HID device, so this is uinput rather than uhid; the uinput fd has nothing to read."""
+    fd = None
+
+    def __init__(self):
+        stick = evdev.AbsInfo(0, -32768, 32767, 16, 128, 0)
+        trig = evdev.AbsInfo(0, 0, 255, 0, 0, 0)
+        hat = evdev.AbsInfo(0, -1, 1, 0, 0, 0)
+        self.ui = evdev.UInput(
+            {E.EV_KEY: list(XBOX_KEYS.values()),
+             E.EV_ABS: [(c, trig if a in XBOX_TRIGGERS else stick) for a, c in XBOX_ABS.items()]
+             + [(E.ABS_HAT0X, hat), (E.ABS_HAT0Y, hat)]},
+            name=XBOX_NAME, vendor=XBOX_ID[0], product=XBOX_ID[1], version=0x0110, bustype=BUS_USB,
+            phys=UHID_PHYS)  # our phys: discovery never offers it as a stick
+        self.sent = {}
+
+    def send(self, out):
+        """out: XboxMapper.output(). Writes only what changed, then one SYN_REPORT."""
+        mask, hat, axes = out
+        vals = {(E.EV_KEY, c): (mask >> XBOX_BUTTONS.index(b)) & 1 for b, c in XBOX_KEYS.items()}
+        for a, v in axes.items():
+            vals[(E.EV_ABS, XBOX_ABS[a])] = v if a in XBOX_TRIGGERS else v - 32768
+        hx, hy = HAT_XY[hat]
+        vals[(E.EV_ABS, E.ABS_HAT0X)], vals[(E.EV_ABS, E.ABS_HAT0Y)] = hx, hy
+        changed = [(k, v) for k, v in vals.items() if self.sent.get(k) != v]
+        for (t, c), v in changed:
+            self.ui.write(t, c, v)
+        if changed:
+            self.ui.syn()
+        self.sent.update(changed)
+
+    def destroy(self):
+        self.ui.close()
 
 
 class PhysState:
@@ -382,6 +431,65 @@ class Mapper:
     def pulse(self, n, now, length=0.35):
         if 1 <= n <= self.spec["buttons"]:
             self.pulses[n] = now + length
+
+
+class XboxMapper:
+    """Real sticks' state -> the Xbox pad, driven by the profile's xbox section. Sources are
+    relative to XBOX_HOME; phys holds only the sticks in "xbox" mode (others are None).
+    Axis values are 0..XBOX_TOP (sticks centred at 32768); XboxPad makes the sticks signed."""
+
+    def __init__(self):
+        self.pulses = {}
+        self.apply(default_xbox_profile())
+
+    def apply(self, profile):
+        self.profile = profile
+        self.axes = {dst: (*split_source(XBOX_HOME, cfg["src"]), cfg["invert"], cfg["deadzone"] / 100, cfg["half"])
+                     for dst, cfg in profile["axes"].items() if cfg["src"]}
+        self.buttons = {b: [split_source(XBOX_HOME, s) for s in v] for b, v in profile["buttons"].items()}
+        self.hatmap = {d: [split_source(XBOX_HOME, s) for s in v] for d, v in profile["hat"].items()}
+
+    def _axis(self, phys, dst):
+        top, trig = XBOX_TOP[dst], dst in XBOX_TRIGGERS
+        role, name, invert, dz, half = self.axes.get(dst, (None, None, False, 0, None))
+        p = phys.get(role) if role else None
+        f = p.fraction(name) if p else None
+        if f is None:
+            return 0 if trig else (top + 1) // 2
+        if invert:
+            f = 1.0 - f
+        if half:  # one half of the travel drives the whole output, e.g. a throttle lever over LT + RT
+            f = max(0.0, min(1.0, (0.5 - f) * 2 if half == "low" else (f - 0.5) * 2))
+        if dz and trig:  # a trigger rests at 0: the deadzone is at the start of its travel
+            f = 0.0 if f < dz else (f - dz) / (1 - dz)
+        elif dz:
+            c = f * 2 - 1
+            m = abs(c)
+            c = 0.0 if m < dz else (m - dz) / (1 - dz) * (1 if c > 0 else -1)
+            f = (c + 1) / 2
+        return max(0, min(top, round(f * top)))
+
+    def output(self, now, phys):
+        """Returns (mask over XBOX_BUTTONS, HID hat, {axis: 0..top})."""
+        for b in [b for b, t in self.pulses.items() if t <= now]:
+            del self.pulses[b]
+        mask = 0
+        for i, b in enumerate(XBOX_BUTTONS):
+            if b in self.pulses or any(Mapper._active(phys, s, now) for s in self.buttons.get(b, [])):
+                mask |= 1 << i
+        on = {d: any(Mapper._active(phys, s, now) for s in self.hatmap.get(d, [])) for d in HAT_DIRS}
+        hat = HAT[(on["right"] - on["left"], on["down"] - on["up"])]
+        axes = {}
+        for a in XBOX_AXES:
+            v = self._axis(phys, a)
+            if a in XBOX_TRIGGERS and mask >> XBOX_BUTTONS.index(a) & 1:
+                v = XBOX_TOP[a]  # a button assigned to LT/RT pulls it fully
+            axes[a] = v
+        return mask, hat, axes
+
+    def pulse(self, b, now, length=0.35):
+        if b in XBOX_BUTTONS:
+            self.pulses[b] = now + length
 
 
 class ControlServer:
@@ -617,11 +725,11 @@ class Hider:
 
 
 class Role:
-    def __init__(self, name, selector, exposed):
+    def __init__(self, name, selector, mode):
         self.name = name
         # the stick role is always configured ("" = any VKB stick); the throttle is optional
         self.selector = selector if (selector or name == "stick") else None
-        self.exposed = exposed
+        self.mode = mode      # "virtual" (Thrustmaster device), "xbox" (feeds the pad) or "real"
         self.dev = None       # open evdev device while attached
         self.phys = None      # PhysState while attached
         self.nodes = {}
@@ -633,6 +741,10 @@ class Role:
         self.dropping = False  # inside a SYN_DROPPED gap: skip events until the next SYN_REPORT
         self.drops = 0         # SYN_DROPPED seen since the last log line
 
+    @property
+    def exposed(self):
+        return self.mode == "real"
+
 
 class Daemon:
     """The event loop: attaches real sticks to roles, feeds the virtual devices, serves the
@@ -640,9 +752,15 @@ class Daemon:
     simulated devices, a fake uhid and a no-op hider."""
     SCAN_EVERY = 1.0
 
-    def __init__(self, selectors, exposed, *, ctl, watcher=None, source=None, make_uhid=None,
+    def __init__(self, selectors, modes, *, ctl, watcher=None, source=None, make_uhid=None, make_pad=None,
                  hider=None, persist=None, fallback=None, grab=True, logger=log):
-        self.roles = {r: Role(r, selectors.get(r), r in exposed) for r in ROLES}
+        if not isinstance(modes, dict):  # a set of exposed roles, as before modes
+            modes = {r: "real" if r in modes else "virtual" for r in ROLES}
+        self.roles = {r: Role(r, selectors.get(r), modes.get(r, "virtual")) for r in ROLES}
+        self.pad_mapper = XboxMapper()
+        self.pad = None                 # the XboxPad while any stick is in "xbox" mode
+        self.pad_last = None
+        self.make_pad = make_pad or XboxPad
         self.ctl, self.watcher = ctl, watcher
         self.source = source or DeviceSource()
         self.make_uhid = make_uhid or Uhid
@@ -663,6 +781,10 @@ class Daemon:
     # -- devices --
     def phys(self):
         return {r: role.phys for r, role in self.roles.items()}
+
+    def pad_phys(self):
+        """Only sticks in "xbox" mode feed the pad, so no stick drives two devices games can see."""
+        return {r: role.phys if role.mode == "xbox" else None for r, role in self.roles.items()}
 
     def attached(self):
         return [role for role in self.roles.values() if role.dev is not None]
@@ -712,10 +834,12 @@ class Daemon:
         role.nodes = self.source.nodes(dev)
         self.log(f"{role.name}: {role.phys.name} {role.phys.id} at {dev.path}"
                  + (" (exposed to games)" if role.exposed else
+                    f" -> {XBOX_NAME} {XBOX_ID[0]:04x}:{XBOX_ID[1]:04x}" if role.mode == "xbox" else
                     f" -> {role.mapper.spec['name']} {role.mapper.spec['vid']:04x}:{role.mapper.spec['pid']:04x}"))
         if not role.exposed:
             self._grab(role, True)
             self._ensure_uhid(role)
+        self._update_pad()
         if role.name == "stick" and self.profile_name == "built-in default":
             self._apply(self.fallback)  # --buttons needs the stick's button numbering
         self._update_hiding()
@@ -743,7 +867,7 @@ class Daemon:
                 self.log(f"{role.name}: could not grab {role.dev.path}: {e}")
 
     def _ensure_uhid(self, role):
-        if role.uhid is None and not role.exposed and role.selector is not None:
+        if role.uhid is None and role.mode == "virtual" and role.selector is not None:
             role.uhid = self.make_uhid(role.mapper.spec)
             role.last = None
 
@@ -751,6 +875,31 @@ class Daemon:
         if role.uhid is not None:
             role.uhid.destroy()
             role.uhid = None
+
+    def _update_pad(self):
+        """The pad appears when a stick in "xbox" mode attaches and, like the Thrustmaster devices,
+        stays while it's unplugged; it goes when no configured stick is in "xbox" mode."""
+        xbox = [r for r in self.roles.values() if r.mode == "xbox" and r.selector is not None]
+        if self.pad is None and any(r.dev is not None for r in xbox):
+            try:
+                try:
+                    self.pad = self.make_pad()
+                except OSError:  # uinput is often a module that isn't loaded yet (install.sh loads it at boot)
+                    subprocess.run(["modprobe", "uinput"], check=False)
+                    self.pad = self.make_pad()
+            except OSError as e:
+                self.log(f"could not create the virtual Xbox controller: {e}")
+                return
+            self.pad_last = None
+            self.log(f"{XBOX_NAME}: created")
+        elif self.pad is not None and not xbox:
+            self._drop_pad()
+
+    def _drop_pad(self):
+        if self.pad is not None:
+            self.pad.destroy()
+            self.pad = None
+            self.log(f"{XBOX_NAME}: removed")
 
     def _update_hiding(self):
         if self.hider is None:
@@ -766,6 +915,7 @@ class Daemon:
         for r, role in self.roles.items():
             old = role.mapper.spec["buttons"]
             role.mapper.apply(profile[r])
+            self.pad_mapper.apply(profile["xbox"])
             role.stages = {s["first"]: (s["second"], s["delay"] / 1000) for s in profile[r].get("stages", [])}
             if role.phys is not None:
                 role.phys.stages = role.stages
@@ -815,27 +965,39 @@ class Daemon:
                     self._drop_uhid(r)
         self._persist({ROLE_CONFIG[r]: self.roles[r].selector or "" for r in ROLES})
         self.scan(force=True)
+        self._update_pad()
         self.send_hello()
 
     def expose(self, role_name, on):
-        """Give a role's real stick to games (no grab, not hidden, virtual device removed) or take it back."""
+        """Give a role's real stick to games, or take it back to its Thrustmaster device."""
+        self.set_mode(role_name, "real" if on else "virtual")
+
+    def set_mode(self, role_name, mode):
+        """What games see of a role's stick: "virtual" (Thrustmaster device), "xbox" (the shared
+        Xbox pad) or "real" (the stick untouched: not grabbed or hidden, no virtual device)."""
+        if mode not in MODES:
+            raise ValueError(f"mode must be one of {', '.join(MODES)}")
         targets = list(self.roles.values()) if role_name == "all" else [self.roles.get(role_name)]
         if None in targets:
             raise ValueError(f"unknown role {role_name!r}")
         for role in targets:
-            if role.exposed == on:
+            if role.mode == mode:
                 continue
-            role.exposed = on
-            if on:
+            old, role.mode = role.mode, mode
+            if mode == "real":
                 self._grab(role, False)
-                self._drop_uhid(role)
-            else:
+            elif old == "real":
                 self._grab(role, True)
-                if role.dev is not None:
-                    self._ensure_uhid(role)
-            self.log(f"{role.name}: " + ("real stick exposed to games" if on else "real stick hidden and emulated again"))
+            if mode != "virtual":
+                self._drop_uhid(role)
+            elif role.dev is not None:
+                self._ensure_uhid(role)
+            self.log(f"{role.name}: " + {"real": "real stick exposed to games",
+                                         "xbox": "feeds the virtual Xbox controller",
+                                         "virtual": "emulates the " + EMULATED_NAMES[role.name]}[mode])
+        self._update_pad()
         self._update_hiding()
-        self._persist({"VKB_HOTAS_EXPOSE": " ".join(r for r in ROLES if self.roles[r].exposed)})
+        self._persist(mode_config({r: self.roles[r].mode for r in ROLES}))
         self.send_hello()
 
     def _persist(self, updates):
@@ -850,6 +1012,9 @@ class Daemon:
         if c == "hello":
             self.ctl.send(self.hello(), fd)
             return
+        if c == "pulse" and cmd.get("role") == "xbox":
+            self.pad_mapper.pulse(cmd.get("button"), time.monotonic())
+            return
         if c == "pulse" and isinstance(cmd.get("button"), int):
             role = self.roles.get(cmd.get("role", "stick"))
             if role:
@@ -860,6 +1025,8 @@ class Daemon:
                 self.select(cmd.get("role"), cmd.get("device"))
             elif c == "expose":
                 self.expose(cmd.get("role"), bool(cmd.get("on")))
+            elif c == "mode":
+                self.set_mode(cmd.get("role"), cmd.get("mode"))
             else:
                 return
             self.ctl.send({"t": "result", "cmd": c, "ok": True, "error": None}, fd)
@@ -871,12 +1038,14 @@ class Daemon:
         roles = {}
         for r, role in self.roles.items():
             spec = role.mapper.spec
-            roles[r] = {"selector": role.selector, "exposed": role.exposed,
+            roles[r] = {"selector": role.selector, "exposed": role.exposed, "mode": role.mode,
                         "device": role.phys.info() if role.phys else None,
                         "emulated": {"name": spec["name"], "id": f"{spec['vid']:04x}:{spec['pid']:04x}",
                                      "buttons": spec["buttons"], "axes": dict(spec["axes"]),
                                      "active": role.uhid is not None}}
-        return {"t": "hello", "roles": roles, "devices": self.devices, "profile": self.profile_name,
+        xbox = {"name": XBOX_NAME, "id": f"{XBOX_ID[0]:04x}:{XBOX_ID[1]:04x}", "active": self.pad is not None,
+                "buttons": list(XBOX_BUTTONS), "axes": dict(XBOX_TOP)}
+        return {"t": "hello", "roles": roles, "xbox": xbox, "devices": self.devices, "profile": self.profile_name,
                 "mapping": self.watcher.path if self.watcher else None,
                 "error": self.watcher.error if self.watcher else None}
 
@@ -890,7 +1059,8 @@ class Daemon:
         for r, role in self.roles.items():
             mask, hat, a = role.mapper.output(now, phys)
             roles[r] = {"raw": role.phys.raw_msg() if role.phys else None, "out": {"b": mask, "h": hat, "a": a}}
-        return {"t": "state", "roles": roles}
+        mask, hat, a = self.pad_mapper.output(now, self.pad_phys())
+        return {"t": "state", "roles": roles, "xbox": {"out": {"b": mask, "h": hat, "a": a}}}
 
     # -- loop --
     def wait_for_sticks(self, seconds):
@@ -950,7 +1120,7 @@ class Daemon:
                 timeout = 200
                 if self.dirty and self.ctl.clients:
                     timeout = max(0, int(33 - (now - last_sent) * 1000))
-                if any(role.mapper.pulses for role in self.roles.values()):
+                if self.pad_mapper.pulses or any(role.mapper.pulses for role in self.roles.values()):
                     timeout = min(timeout, 30)
                 for role in self.attached():
                     w = role.phys.pending(now)
@@ -1009,6 +1179,12 @@ class Daemon:
                         role.uhid.send(r)
                         role.last = r
                         self.dirty = True
+                if self.pad is not None:
+                    out = self.pad_mapper.output(now, self.pad_phys())
+                    if out != self.pad_last:
+                        self.pad.send(out)
+                        self.pad_last = out
+                        self.dirty = True
                 if self.dirty and self.ctl.clients and now - last_sent >= 0.033:
                     self.ctl.send(self.state_msg(now))
                     last_sent, self.dirty = now, False
@@ -1022,6 +1198,7 @@ class Daemon:
         for role in self.roles.values():
             self._drop_uhid(role)
             self._grab(role, False)
+        self._drop_pad()
         if self.hider:
             self.hider.apply({})
 
@@ -1074,7 +1251,7 @@ def main():
     fallback = default_profile(args.button_count, axis_map, [i.upper() for i in args.invert])
     Hider.cleanup()  # a previous instance may have crashed
     ctl = ControlServer(uid)
-    daemon = Daemon({"stick": args.device, "throttle": args.throttle}, exposed_roles(), ctl=ctl,
+    daemon = Daemon({"stick": args.device, "throttle": args.throttle}, role_modes(), ctl=ctl,
                     watcher=MappingWatcher(path, uid) if path else None, fallback=fallback,
                     hider=None if args.no_hide else Hider(), grab=not args.no_grab,
                     make_uhid=lambda spec: Uhid(spec, args.verbose),
@@ -1091,7 +1268,9 @@ def main():
             orig_attach(role, dev)
         daemon.attach = attach
 
-    log(f"emulating {', '.join(EMULATED_NAMES[r] for r in ROLES if daemon.roles[r].selector is not None)}; "
+    shown = {"virtual": lambda r: EMULATED_NAMES[r], "xbox": lambda r: f"{XBOX_NAME} ({r})",
+             "real": lambda r: f"real {r} stick"}
+    log(f"emulating {', '.join(shown[daemon.roles[r].mode](r) for r in ROLES if daemon.roles[r].selector is not None)}; "
         f"mapping file: {path or 'none'}")
     if not daemon.wait_for_sticks(args.wait):
         wanted = ", ".join(f"{r}={s.selector or 'any VKB stick'}" for r, s in daemon.roles.items() if s.selector is not None)
