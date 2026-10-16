@@ -143,6 +143,13 @@ h3::after{content:"";flex:1;height:1px;background:var(--line)}
 .emu .compass span.on{background:var(--cyan-d);border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 10px rgba(70,229,255,.35)}
 .hint{color:var(--muted);font-size:12.5px}
 
+/* two-stage triggers */
+.stages{display:flex;flex-direction:column;gap:8px}
+.stg{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12.5px}
+.stg select{max-width:190px}
+.stg .g{display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.stg .input{width:64px}
+
 /* physical buttons */
 .pbtns{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:6px}
 .pb{position:relative;height:46px;border-radius:4px;background:#0a1016;border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;font:600 13px var(--mono);color:var(--muted);transition:background .08s,border-color .08s,box-shadow .08s}
@@ -336,6 +343,8 @@ footer{padding:0 24px 30px;color:var(--dim);font:12px var(--mono);text-align:cen
     <div class="hatwrap"><div class="compass" id="physHat"></div><span class="hint">Hat directions can be assigned like buttons.</span></div>
     <h3>Buttons</h3>
     <div class="pbtns" id="physBtns"></div>
+    <h3>Two-stage triggers</h3>
+    <div class="stages" id="stages"></div>
   </section>
 
   <section class="panel emu">
@@ -533,7 +542,7 @@ async function renamePhys(n, pr = role) {
   if (name === null) return;
   (lay.names ||= {});
   if (name.trim()) lay.names[n] = name.trim().slice(0, 32); else delete lay.names[n];
-  saveLayout(); renderOutputs();
+  saveLayout(); renderOutputs(); renderStages();
 }
 
 function sourceChips(list, onRemove) {
@@ -610,10 +619,42 @@ function renderPhysTags() {
     for (const [kind, key] of outKeys(p)) for (const s of outList(p, kind, key)) { const [pr, l] = srcSplit(s, r); if (pr === role && typeof l === "number") (tags[l] ||= []).push(outNameR(r, kind, key)); } }
   refs.pb.forEach((b, i) => { if (!b) return; const t = tags[i] || []; b.lastChild.textContent = t.length ? "→" + t.join(",") : ""; b.classList.toggle("mapped", t.length > 0);
     const nm = physName(i), hb = hatBadge(i); b.classList.toggle("named", !!nm);
-    b.title = `Button ${i}` + (nm ? ` “${nm}”` : "") + (hb ? ` (${hb})` : "") + (t.length ? `: drives ${t.join(", ")}` : ": not used") + ". Double-click to name it."; });
+    const st = (prof().stages || []).find(s => s.first === i || s.second === i);
+    const sn = st ? (st.first === i ? ` Stage 1 of a two-stage trigger: released while button ${st.second} is held.` : ` Stage 2 of a two-stage trigger (button ${st.first} is stage 1).`) : "";
+    b.title = `Button ${i}` + (nm ? ` “${nm}”` : "") + (hb ? ` (${hb})` : "") + (t.length ? `: drives ${t.join(", ")}` : ": not used") + "." + sn + " Double-click to name it."; });
 }
 
-function renderAll() { renderProfileBar(); renderEmuAxes(); renderOutputs(); renderPhys(); renderMap(); renderRoleTabs(); renderBanners(); }
+function renderStages() {
+  // physical two-stage triggers of this role's stick: stage 1 lets go while stage 2 is held (daemon side)
+  const box = $("#stages"); box.textContent = "";
+  const p = prof(), list = (p.stages ||= []), dev = physInfo(), n = Math.max(dev ? dev.buttons : 32, ...list.flatMap(s => [s.first, s.second]));
+  const pick = (val, set) => { const s = el("select"); s.disabled = readOnly;
+    for (let i = 1; i <= n; i++) { const o = el("option", null, `B${i}` + (physName(i) ? ` · ${physName(i)}` : "")); o.value = i; s.append(o); }
+    s.value = val; s.onchange = () => set(+s.value); return s; };
+  const save = () => { scheduleSave(); renderPhysTags(); };
+  list.forEach((s, i) => {
+    const row = el("div", "stg");
+    const dl = el("input", "input"); dl.type = "number"; dl.min = 0; dl.max = 500; dl.step = 10; dl.value = s.delay; dl.disabled = readOnly;
+    dl.title = "Optional: stage 1 only counts once held this long, so a quick full pull sends stage 2 alone. Adds this much lag to stage 1.";
+    dl.onchange = () => { s.delay = Math.max(0, Math.min(500, Math.round(+dl.value || 0))); dl.value = s.delay; save(); };
+    const rm = el("button", "btn small danger", "Remove"); rm.disabled = readOnly; rm.onclick = () => { list.splice(i, 1); save(); renderStages(); };
+    const clash = list.some((o, j) => j !== i && o.first === s.first);
+    const grp = (...k) => { const g = el("span", "g"); g.append(...k); return g; };
+    row.append(grp("Stage 1", pick(s.first, v => { s.first = v; save(); renderStages(); })),
+      grp("lets go while stage 2", pick(s.second, v => { s.second = v; save(); renderStages(); }), "is held"),
+      grp("Delay", dl, "ms"), rm);
+    if (s.first === s.second || clash) row.append(el("span", "hint", s.first === s.second ? "⚠ pick two different buttons" : "⚠ already stage 1 of another trigger"));
+    box.append(row);
+  });
+  const add = el("button", "btn small", "+ Two-stage trigger"); add.disabled = readOnly || list.length >= 8;
+  add.title = "For a trigger whose full pull presses a second button: while the full-pull button is held, the stage 1 button counts as released, so each can do its own thing in game";
+  add.onclick = () => { const used = new Set(list.map(s => s.first)); let a = 1; while (used.has(a)) a++; list.push({first: a, second: a + 1, delay: 0}); save(); renderStages(); };
+  const wrap = el("div", "stg"); wrap.append(add);
+  if (!list.length) wrap.append(el("span", "hint", "A full pull of a dual-stage trigger also holds stage 1. Add one here to release stage 1 while stage 2 is held, so you can map them separately."));
+  box.append(wrap);
+}
+
+function renderAll() { renderProfileBar(); renderEmuAxes(); renderOutputs(); renderPhys(); renderStages(); renderMap(); renderRoleTabs(); renderBanners(); }
 
 // ---------- roles and devices ----------
 function setRole(r) {
@@ -871,7 +912,7 @@ function ask(title, text, value, withInput = true) {
   });
 }
 function freshRole(r, count) {
-  const p = {button_count: count || ROLE_INFO[r].counts[0], axes: {}, buttons: {}, hat: {}, labels: {}};
+  const p = {button_count: count || ROLE_INFO[r].counts[0], axes: {}, buttons: {}, hat: {}, labels: {}, stages: []};
   for (const [ax] of ROLE_INFO[r].axes) p.axes[ax] = {src: ROLE_INFO[r].defaults[ax] || null, invert:false, deadzone:0};
   for (let i = 1; i <= p.button_count; i++) p.buttons[i] = [i];
   for (const [d] of HATS) p.hat[d] = [`hat:${d}`];
@@ -1494,7 +1535,7 @@ function connect() {
       renderRoleTabs(); renderBanners(); if (!$("#devModal").hidden) renderDevices();
       setPill(true, "LIVE · " + m.profile.toUpperCase());
       if (m.error) setSave("daemon rejected file: " + m.error, "err");
-      if (changed || !Object.keys(refs.physAx).length) { renderPhys(); renderEmuAxes(); renderOutputs(); }
+      if (changed || !Object.keys(refs.physAx).length) { renderPhys(); renderStages(); renderEmuAxes(); renderOutputs(); }
     } else if (m.t === "mapping") {
       if (m.ok) { setSave(`saved · applied “${m.profile}”`, "ok"); setPill(true, "LIVE · " + m.profile.toUpperCase()); }
       else { setSave("daemon rejected file: " + m.error, "err"); }
@@ -1511,7 +1552,7 @@ function connect() {
     const [r, l] = await Promise.all([api("GET", "/api/mapping"), api("GET", "/api/layout")]);
     try { const g = await api("GET", "/api/references"); gameRefs = g.references || {}; if (g.error) toast("Game defaults couldn't be read: " + g.error, true); } catch (e) { gameRefs = {}; }
     mapping = r.mapping;
-    if (l.api !== 14) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
+    if (l.api !== 15) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
       readOnly = true; layoutAll = layout = null;
       for (const [k, p] of Object.entries(mapping.profiles)) if (!p.stick) mapping.profiles[k] = {stick: p, throttle: freshRole("throttle")};
       for (const sel of [".maptools", ".stage"]) document.querySelector(sel).hidden = true;

@@ -220,6 +220,7 @@ def default_role_profile(role, button_count=None, axes=None, invert=()):
         "buttons": {str(i): [i] for i in range(1, count + 1)},
         "hat": {d: [f"hat:{d}"] for d in HAT_DIRS},
         "labels": {},
+        "stages": [],
     }
 
 
@@ -306,6 +307,35 @@ def normalize_role_profile(role, p):
     if not isinstance(labels, dict):
         raise ValueError("labels must be an object")
     out["labels"] = {str(k)[:16]: str(v)[:48] for k, v in labels.items() if str(v).strip()}
+    out["stages"] = _stages(p.get("stages") or [])
+    return out
+
+
+MAX_STAGE_DELAY = 500  # ms
+
+
+def _stages(v):
+    """Two-stage triggers of the role's real stick: [{first, second, delay}]. While physical button
+    `second` (full pull) is held, `first` (stage 1) counts as released; with a delay (ms), a stage 1
+    press only counts once it has been held that long, so a quick full pull sends stage 2 alone."""
+    if not isinstance(v, list) or len(v) > 8:
+        raise ValueError("stages must be a list of at most 8 two-stage triggers")
+    out, firsts = [], set()
+    for i, s in enumerate(v):
+        if not isinstance(s, dict):
+            raise ValueError(f"stages[{i}] must be an object")
+        a, b, d = s.get("first"), s.get("second"), s.get("delay", 0)
+        for name, n in (("first", a), ("second", b)):
+            if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= 256:
+                raise ValueError(f"stages[{i}].{name} must be a physical button 1-256")
+        if a == b:
+            raise ValueError(f"stages[{i}]: stage 1 and stage 2 must be different buttons")
+        if a in firsts:
+            raise ValueError(f"stages[{i}]: button {a} is already stage 1 of another trigger")
+        if not isinstance(d, int) or isinstance(d, bool) or not 0 <= d <= MAX_STAGE_DELAY:
+            raise ValueError(f"stages[{i}].delay must be 0-{MAX_STAGE_DELAY} (ms)")
+        firsts.add(a)
+        out.append({"first": a, "second": b, "delay": d})
     return out
 
 

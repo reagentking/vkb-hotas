@@ -162,6 +162,13 @@ Throttle); each tab has its own panels:
   to name that physical button (e.g. "Trigger stage 1", "Rapid-fire paddle up"). The name
   appears under the chip on every card it feeds, in grid and stick-map tooltips and in
   messages. Names describe your hardware, so all profiles share them.
+- **Two-stage triggers:** a dual-stage trigger's full pull (e.g. B2) also holds stage 1 (B1),
+  so whatever you map to B1 fires too. Under **Two-stage triggers** (below the physical
+  buttons), click **+ Two-stage trigger** and pick stage 1 and stage 2: while stage 2 is held,
+  stage 1 counts as released, so the game gets only stage 2's action and you can map the two
+  separately. Stage 1 still sends instantly; a full pull shows stage 1 only for the instant
+  before stage 2 closes. To hide even that, set a **Delay** (ms): stage 1 then only counts once
+  held that long, which adds that much lag to it. Set per profile and per stick.
 - **5-way hat badges:** a chip whose button belongs to a 5-way hat shows the hat and direction,
   e.g. `BTN 11 · Hat 2 ▲`.
 - **Game defaults:** pick a game in **Game defaults** (profile bar) and every card shows, read-only,

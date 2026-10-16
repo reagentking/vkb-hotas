@@ -66,8 +66,11 @@ if os.path.exists(mp):
         for r, sec in ([(r, p[r]) for r in ("stick", "throttle") if r in p] if "stick" in p else [("stick", p)]):
             cross = sum(1 for v in [*sec["buttons"].values(), *sec["hat"].values()] for s in v if isinstance(s, str) and ":" in s and not s.startswith("hat:"))
             axes = ", ".join("%s: %s" % (k, v["src"]) for k, v in sec["axes"].items())
+            stages = ", ".join("B%d/B%d%s" % (s["first"], s["second"], f" {s['delay']} ms" if s["delay"] else "")
+                               for s in sec.get("stages", []))
             print(f"    {r}: {sec['button_count']} buttons, axes {{{axes}}}"
-                  + (f", {cross} sources on the other stick" if cross else ""))
+                  + (f", {cross} sources on the other stick" if cross else "")
+                  + (f", two-stage triggers {stages}" if stages else ""))
     except Exception as e:
         print(f"  mapping.json INVALID: {e}")
 else:

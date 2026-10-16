@@ -121,7 +121,9 @@ dev/fake-daemon.py --unplug 1 / --plug 1    # simulate unplugging / replugging s
 
 **Mapper logic in isolation:** load the hyphenated daemon file with importlib. A `Mapper` is one
 role's output; it reads every role's `PhysState`, which is how cross-mapping works. `FakeStick` in
-`dev/fake-daemon.py` is a ready-made fake device.
+`dev/fake-daemon.py` is a ready-made fake device: it tracks its own state for `active_keys()` /
+`absinfo()` (what `PhysState.resync` reads) and `overflow(*lost)` simulates a SYN_DROPPED. Set
+`ps.stages = {1: (2, 0.0)}` to test a two-stage trigger.
 
 ```python
 import importlib.util
@@ -208,7 +210,8 @@ daemon, the GUI server and the checker. Change the schema there and nowhere else
 - **Mapping version 2:** a profile is `{stick: SECTION, throttle: SECTION}`. A section is
   `button_count` (stick 16|32, throttle 14|32); `axes{...: {src, invert, deadzone%}}` (stick X Y RZ
   SLIDER; throttle X Y Z RX RY RZ SLIDER); `buttons{"N": [sources]}`; `hat{up,down,left,right:
-  [sources]}`; `labels`. Version 1 (one stick profile at the top level) becomes the stick section.
+  [sources]}`; `labels`; `stages[{first, second, delay ms 0-500}]` (two-stage triggers, physical
+  buttons of the role's own stick). Version 1 (one stick profile at the top level) becomes the stick section.
 - **Sources** are relative to the section's role: a physical button number (1-based) or
   `"hat:<dir>"` on the role's own stick, or the same prefixed with the other role (`"throttle:5"`,
   `"stick:hat:up"`). Axis sources likewise (`"ABS_Z"`, `"throttle:ABS_Z"`). The normalizer strips a
@@ -275,7 +278,15 @@ guards, and keeps them:
   11 = layout format 7 (whole-stick thumb-side bump moved to the other side of the grip);
   12 = `evo-ot-straight(-l)` drawings (an older server would replace unknown drawings on save);
   13 = game defaults (`GET /api/references`, a profile's optional `reference`);
-  14 = user game defaults (`PUT`/`DELETE /api/references/u-…`).
+  14 = user game defaults (`PUT`/`DELETE /api/references/u-…`); 15 = two-stage triggers (section
+  `stages`; an older server's normalizer would drop them on save).
+- **Two-stage triggers:** physically a full pull always passes through stage 1, so remapping alone
+  can't free stage 2's button. `PhysState.active(n, now)` treats a `stages` stage-1 button as
+  released while its stage-2 button is held, and (with `delay`) until held `delay` ms; the loop's
+  poll timeout follows `PhysState.pending()` so a delayed stage 1 turns on on time. It filters
+  the real stick's buttons before mapping, so every output fed from stage 1 (also cross-mapped
+  ones) follows it; `raw` in the state stream stays unfiltered. User chose: release while stage 2
+  is held, zero delay by default, optional delay.
 - The page is one self-contained file (CSP forbids external resources). Physical inputs are amber
   and emulated/game outputs are cyan.
 - **Stick map:** layout and photos are owned by the mapper server alone; the daemon never reads them.

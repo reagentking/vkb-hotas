@@ -245,6 +245,8 @@ class PhysState:
         self.btn_num = {code: i + 1 for i, code in enumerate(sorted(dev.capabilities().get(E.EV_KEY, [])))}
         self.raw = {c: ai.value for c, ai in self.absinfo.items()}
         self.pressed = set()
+        self.down_at = {}   # button -> time.monotonic() of its press
+        self.stages = {}    # stage-1 button -> (stage-2 button, delay in s); see vkb_common._stages
         self.hat = [0, 0]
         self.name = dev.name.strip()
         self.id = vidpid(dev)
@@ -263,7 +265,12 @@ class PhysState:
             return True
         if ev.type == E.EV_KEY and ev.code in self.btn_num:
             n = self.btn_num[ev.code]
-            (self.pressed.add if ev.value else self.pressed.discard)(n)
+            if ev.value:
+                if n not in self.pressed:
+                    self.down_at[n] = time.monotonic()
+                self.pressed.add(n)
+            else:
+                self.pressed.discard(n)
             return True
         return False
 
@@ -271,16 +278,33 @@ class PhysState:
         """Re-read the whole state from the kernel, after the event buffer overflowed (SYN_DROPPED):
         the dropped events may include button releases, which would otherwise stay held."""
         self.pressed = {self.btn_num[c] for c in dev.active_keys() if c in self.btn_num}
+        now = time.monotonic()
+        for n in self.pressed - self.down_at.keys():
+            self.down_at[n] = now
         for c in self.raw:
             self.raw[c] = dev.absinfo(c).value
         self.hat = [dev.absinfo(c).value if c in self.hat_codes else 0 for c in (E.ABS_HAT0X, E.ABS_HAT0Y)]
 
-    def active(self, src):
+    def active(self, src, now):
         if isinstance(src, int):
-            return src in self.pressed
+            if src not in self.pressed:
+                return False
+            st = self.stages.get(src)
+            if st:  # stage 1 of a two-stage trigger
+                second, delay = st
+                if second in self.pressed or (delay and now - self.down_at.get(src, 0) < delay):
+                    return False
+            return True
         d = src[4:]
         return ((d == "up" and self.hat[1] < 0) or (d == "down" and self.hat[1] > 0)
                 or (d == "left" and self.hat[0] < 0) or (d == "right" and self.hat[0] > 0))
+
+    def pending(self, now):
+        """Seconds until a held stage 1 outlasts its delay (None if nothing is waiting)."""
+        waits = [self.down_at.get(a, 0) + d - now for a, (b, d) in self.stages.items()
+                 if d and a in self.pressed and b not in self.pressed]
+        waits = [w for w in waits if w > 0]
+        return min(waits) if waits else None
 
     def fraction(self, name):
         code = E.ecodes.get(name)
@@ -316,10 +340,10 @@ class Mapper:
         self.hatmap = {d: [split_source(self.role, s) for s in v] for d, v in profile["hat"].items()}
 
     @staticmethod
-    def _active(phys, src):
+    def _active(phys, src, now):
         role, local = src
         p = phys.get(role)
-        return p is not None and p.active(local)
+        return p is not None and p.active(local, now)
 
     def _axis(self, phys, dst):
         role, name, invert, dz = self.axes.get(dst, (None, None, False, 0))
@@ -345,9 +369,9 @@ class Mapper:
         for n in self.pulses:  # test presses from the mapper GUI, even on unassigned slots
             mask |= 1 << (n - 1)
         for n, srcs in self.buttons.items():
-            if any(self._active(phys, s) for s in srcs):
+            if any(self._active(phys, s, now) for s in srcs):
                 mask |= 1 << (n - 1)
-        on = {d: any(self._active(phys, s) for s in self.hatmap.get(d, [])) for d in HAT_DIRS}
+        on = {d: any(self._active(phys, s, now) for s in self.hatmap.get(d, [])) for d in HAT_DIRS}
         hat = HAT[(on["right"] - on["left"], on["down"] - on["up"])]
         return mask, hat, {a: self._axis(phys, a) for a in ROLE_AXES[self.role]}
 
@@ -602,6 +626,7 @@ class Role:
         self.phys = None      # PhysState while attached
         self.nodes = {}
         self.mapper = Mapper(name)
+        self.stages = {}      # the profile's two-stage triggers for this role's stick
         self.uhid = None      # virtual device while active
         self.last = None      # last report sent
         self.warned = None
@@ -682,6 +707,7 @@ class Daemon:
 
     def attach(self, role, dev):
         role.dev, role.phys, role.last = dev, PhysState(dev), None
+        role.phys.stages = role.stages
         role.dropping, role.drops = False, 0
         role.nodes = self.source.nodes(dev)
         self.log(f"{role.name}: {role.phys.name} {role.phys.id} at {dev.path}"
@@ -740,6 +766,9 @@ class Daemon:
         for r, role in self.roles.items():
             old = role.mapper.spec["buttons"]
             role.mapper.apply(profile[r])
+            role.stages = {s["first"]: (s["second"], s["delay"] / 1000) for s in profile[r].get("stages", [])}
+            if role.phys is not None:
+                role.phys.stages = role.stages
             if role.uhid is not None and role.mapper.spec["buttons"] != old:
                 self._drop_uhid(role)  # descriptor changes: recreate the virtual device
                 self._ensure_uhid(role)
@@ -923,6 +952,10 @@ class Daemon:
                     timeout = max(0, int(33 - (now - last_sent) * 1000))
                 if any(role.mapper.pulses for role in self.roles.values()):
                     timeout = min(timeout, 30)
+                for role in self.attached():
+                    w = role.phys.pending(now)
+                    if w is not None:  # a two-stage trigger's stage 1 becomes active then
+                        timeout = min(timeout, int(w * 1000) + 1)
                 poller, owner = select.poll(), {}
                 for role in self.roles.values():
                     if role.dev is not None:

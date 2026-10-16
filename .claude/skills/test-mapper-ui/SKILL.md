@@ -82,6 +82,11 @@ example, press a button and check `out.b` has the mapped bit set, or send
 - **Mapping:** Assign (and Shift+Assign) moves a source off other slots *on both devices*; a press
   on the other stick saves a prefixed source (`throttle:7`) and shows a `THR`/`STK` chip tag;
   cross axes in the dropdown; labels persist; Test pulses light the right device's output.
+- **Two-stage triggers:** + Two-stage trigger adds a row (saved as the section's `stages` in
+  `DIR/mapping.json`); a duplicate stage 1 or equal buttons shows a warning and the save fails
+  cleanly; Remove and the Delay box persist across reload. Behaviour: open the socket, read
+  `state` lines, send `fake_press` 1 then 2 within the hold time; `raw.b` should go `[1]`,
+  `[1,2]`, `[2]` while `out.b` goes `1`, `2`, `2` (stage 1 dropped while stage 2 is held).
 - **Stick map:**
   - pins land where clicked (also when zoomed);
   - each picture shows only its own pins;
