@@ -451,9 +451,14 @@ never written into Steam's `localconfig.vdf`.
 
 ## Gotchas (all hit during development)
 
-- **uinput from the user session:** `/dev/uinput` here carries an ACL for the user (Steam's udev
-  rules), but while the module isn't loaded an open gives ENODEV and doesn't autoload it. The
-  daemon (root) runs `modprobe uinput`; `install.sh` loads it and adds it to `modules-load.d`.
+- **uinput not loaded (ENODEV):** `/dev/uinput` here carries an ACL for the user (Steam's udev
+  rules), but while the module isn't loaded an open gives ENODEV. The real cause on the user's
+  machine: the kernel package had been updated (running 7.2.8, installed 7.2.9), so
+  `/lib/modules/$(uname -r)` was gone and *no* module could load until a reboot; uhid only worked
+  because it was already loaded. `install.sh`'s `load_module` checks `/sys/module`, `modprobe`
+  and `modules.builtin`, and says "reboot" when the running kernel's modules are missing (for uhid
+  it then installs anyway instead of dying). The daemon also tries `modprobe uinput`, and
+  `modules-load.d/vkb-hotas.conf` loads both at boot.
 - **proton-setup vs Xbox mode:** proton-setup sets winebus `Enable SDL`=0 in a prefix (needed so the
   Thrustmaster devices go through hidraw), but SDL is what turns the uinput pad into an XInput
   controller in Wine. Pad-only games should keep the default prefix (`proton-setup.py --undo`).

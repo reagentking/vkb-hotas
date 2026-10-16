@@ -53,12 +53,29 @@ if not sticks:
     exit 0
 fi
 
-# uhid (Thrustmaster devices) and uinput (Xbox controller mode) may be modules or built in
-modprobe uhid 2>/dev/null || true
-modprobe uinput 2>/dev/null || true
-[[ -c /dev/uhid ]] || die "/dev/uhid missing (kernel without CONFIG_UHID?)"
-[[ -c /dev/uinput ]] || echo "note: /dev/uinput missing, so Xbox controller mode won't work (kernel without CONFIG_INPUT_UINPUT?)"
-printf 'uhid\nuinput\n' > /etc/modules-load.d/vkb-hotas.conf
+# uhid (Thrustmaster devices) and uinput (Xbox controller mode) may be modules or built in.
+# load_module NAME: 0 if loaded (or built in) now; otherwise prints why and returns 1
+load_module() {
+    [[ -d /sys/module/$1 ]] && return 0
+    modprobe "$1" 2>/dev/null && return 0
+    grep -qs "/$1.ko" "/lib/modules/$(uname -r)/modules.builtin" && return 0
+    if [[ ! -d /lib/modules/$(uname -r) ]]; then
+        # typical after a kernel package update: the running kernel's modules were replaced
+        echo "warning: can't load $1: the running kernel ($(uname -r)) has no modules installed any more," \
+             "probably because the kernel was updated. Reboot, and $1 loads at boot." >&2
+    else
+        echo "warning: can't load the $1 kernel module (modprobe $1 failed)." >&2
+    fi
+    return 1
+}
+printf 'uhid\nuinput\n' > /etc/modules-load.d/vkb-hotas.conf  # loaded at every boot
+if load_module uhid; then
+    load_module uinput || echo "  Xbox controller mode needs uinput; everything else works without it." >&2
+elif [[ -d /lib/modules/$(uname -r) ]]; then
+    die "uhid unavailable (kernel without CONFIG_UHID?)"
+else
+    echo "Installing anyway: the service starts working after the reboot." >&2
+fi
 
 # config: keep the user's file, install the template otherwise
 [[ -e $conf ]] || install -Dm644 "$here/service/vkb-hotas.default" "$conf"

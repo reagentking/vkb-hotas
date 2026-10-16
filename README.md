@@ -252,6 +252,8 @@ and Proton hands it to the game as an XInput controller.
   applies on top if you've set one.
 - **Limits:** a pad has 11 buttons, 2 triggers, 2 sticks and a D-pad, so only the buttons you
   choose are used. Rumble is accepted and ignored.
+- **Needs the `uinput` kernel module.** The installer loads it now and at every boot. If it
+  warns that it can't load it because the kernel was updated, reboot.
 
 ## Configuration
 
