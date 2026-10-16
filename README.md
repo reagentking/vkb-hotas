@@ -271,7 +271,9 @@ throttle), plus button numbers above 16.
   cross-mapped them.
 - `sudo systemctl stop vkb-hotas` turns everything off; `start` turns it back on. Plugging
   in any joystick also starts it.
-- Logs: `journalctl -u vkb-hotas -b`
+- Logs: `journalctl -u vkb-hotas -b`. A line "kernel event buffer overflowed" means some
+  stick events were lost before the daemon read them; it re-reads the stick's state right
+  away, so no button stays stuck. If a button ever seems held after you let go, check for it.
 
 ## Uninstall
 

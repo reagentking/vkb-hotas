@@ -71,6 +71,7 @@ class FakeStick:
         self.queue = []
         self.plugged = True
         self.grabbed = False
+        self.down, self.values = set(), {}
 
     def capabilities(self, absinfo=False):
         return {E.EV_ABS: [(E.ABS_X, AbsInfo(2048, 4095)), (E.ABS_Y, AbsInfo(2048, 4095)),
@@ -80,8 +81,31 @@ class FakeStick:
                 E.EV_KEY: list(self.keys)}
 
     def inject(self, *events):
+        for e in events:  # kept for active_keys()/absinfo(), what the daemon re-reads after SYN_DROPPED
+            if e.type == E.EV_KEY:
+                (self.down.add if e.value else self.down.discard)(e.code)
+            elif e.type == E.EV_ABS:
+                self.values[e.code] = e.value
         self.queue += events
         os.write(self._w, b"x")
+
+    def overflow(self, *lost):
+        """What a kernel buffer overflow looks like: the lost events change the state but are never
+        delivered; the reader gets SYN_DROPPED, then the next packet."""
+        for e in lost:
+            if e.type == E.EV_KEY:
+                (self.down.add if e.value else self.down.discard)(e.code)
+            elif e.type == E.EV_ABS:
+                self.values[e.code] = e.value
+        self.queue.append(ev(E.EV_SYN, E.SYN_DROPPED, 0))
+        self.inject(ev(E.EV_SYN, E.SYN_REPORT, 0))
+
+    def active_keys(self):
+        return sorted(self.down)
+
+    def absinfo(self, code):
+        ai = dict(self.capabilities()[E.EV_ABS])[code]
+        return AbsInfo(self.values.get(code, ai.value), ai.max, ai.min)
 
     def read(self):
         try:
@@ -104,6 +128,9 @@ class FakeSource:
 
     def scan(self):
         return [s for s in self.sticks if s.plugged]
+
+    def signature(self):
+        return tuple(s.plugged for s in self.sticks)
 
     def release(self, dev):
         pass  # simulated sticks stay "open"

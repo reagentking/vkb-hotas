@@ -165,7 +165,8 @@ virtual device is destroyed and re-created when its `button_count` changes the H
   section and *every* role's `PhysState` (cross-mapping). `make_spec(role, n)` gives the HID
   descriptor and packer: T.16000M 9/11 bytes; TWCS 17/19 bytes (buttons padded to a byte, hat, 7 u16
   axes X Y Z Rx Ry Rz Slider). The T.16000M descriptor is byte-identical to the pre-roles version.
-- **Scanning:** every second, `scan()` lists joysticks (`list_sticks`: EV_ABS plus joystick/gamepad
+- **Scanning:** every second, `scan()` checks `DeviceSource.signature()` (the names in `/dev/input`
+  and `/dev/hidraw*`) and, only when it changed (or `force=True`, as `select` does), lists joysticks (`list_sticks`: EV_ABS plus joystick/gamepad
   buttons, no touchpads, not our own `phys == vkb-hotas/uhid`), attaches configured sticks that
   appeared and publishes the list in `hello.devices`. An unplugged stick is detected by
   POLLHUP/ENODEV and detached, but its **virtual device stays** (neutral), so running games keep it;
@@ -397,6 +398,14 @@ never written into Steam's `localconfig.vdf`.
 
 ## Gotchas (all hit during development)
 
+- **Lost button releases (SYN_DROPPED).** The real stick sends ~1000 reports/s and its evdev
+  client buffer holds ~128 events, so a stall of a few tens of ms overflows it. The kernel then
+  discards events and sends `SYN_DROPPED`. Ignoring it left buttons held in game (user saw B1, B2,
+  B5 stick). `Daemon.feed` skips to the next `SYN_REPORT` and calls `PhysState.resync()`
+  (`active_keys()` + `absinfo()`); drops are logged at most once a minute ("kernel event buffer
+  overflowed"). The stall was the once-a-second full scan, which as root opens all ~33 input
+  devices; it now runs only when `/dev` nodes come or go. Keep slow work out of the event loop.
+  `FakeStick.overflow()` simulates a drop.
 - **Wine log prefixes are thread IDs, not process IDs.** Games read DirectInput from different
   threads than the one that acquired the device, so `vkb-check.py` keys read counts by device iface.
   DirectInput type `0x10114` ("limited joystick") is expected: the T.16000M has no Z axis.

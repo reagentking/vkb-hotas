@@ -237,8 +237,9 @@ class PhysState:
     """Live state of one real stick."""
 
     def __init__(self, dev):
-        self.absinfo = {c: ai for c, ai in dev.capabilities(absinfo=True).get(E.EV_ABS, [])
-                        if not E.ABS_HAT0X <= c <= E.ABS_HAT3Y}
+        abs_caps = dict(dev.capabilities(absinfo=True).get(E.EV_ABS, []))
+        self.absinfo = {c: ai for c, ai in abs_caps.items() if not E.ABS_HAT0X <= c <= E.ABS_HAT3Y}
+        self.hat_codes = {c for c in abs_caps if c in (E.ABS_HAT0X, E.ABS_HAT0Y)}
         # Physical button numbers follow Linux joystick order, which matches the
         # HID button numbers VKBDevCfg shows (for the first 80 or so buttons).
         self.btn_num = {code: i + 1 for i, code in enumerate(sorted(dev.capabilities().get(E.EV_KEY, [])))}
@@ -265,6 +266,14 @@ class PhysState:
             (self.pressed.add if ev.value else self.pressed.discard)(n)
             return True
         return False
+
+    def resync(self, dev):
+        """Re-read the whole state from the kernel, after the event buffer overflowed (SYN_DROPPED):
+        the dropped events may include button releases, which would otherwise stay held."""
+        self.pressed = {self.btn_num[c] for c in dev.active_keys() if c in self.btn_num}
+        for c in self.raw:
+            self.raw[c] = dev.absinfo(c).value
+        self.hat = [dev.absinfo(c).value if c in self.hat_codes else 0 for c in (E.ABS_HAT0X, E.ABS_HAT0Y)]
 
     def active(self, src):
         if isinstance(src, int):
@@ -490,6 +499,16 @@ class DeviceSource:
     def scan(self):
         return list_sticks()
 
+    @staticmethod
+    def signature():
+        """Changes whenever an input or hidraw node comes or goes. Opening every input device takes
+        long enough (tens of ms, as root) for a busy stick's kernel event buffer to overflow, so the
+        daemon rescans only when this changes."""
+        try:
+            return tuple(sorted(os.listdir("/dev/input"))) + tuple(sorted(glob.glob("/dev/hidraw*")))
+        except OSError:
+            return None
+
     def release(self, dev):
         try:
             dev.close()
@@ -586,6 +605,8 @@ class Role:
         self.uhid = None      # virtual device while active
         self.last = None      # last report sent
         self.warned = None
+        self.dropping = False  # inside a SYN_DROPPED gap: skip events until the next SYN_REPORT
+        self.drops = 0         # SYN_DROPPED seen since the last log line
 
 
 class Daemon:
@@ -611,6 +632,7 @@ class Daemon:
         self.dirty = True
         self.tick = None                # optional callable(now), for the fake daemon
         self.extra_fds = {}             # fd -> callable(), for the fake daemon
+        self._scan_sig = None           # source.signature() at the last scan
         self._apply(self.fallback)
 
     # -- devices --
@@ -620,7 +642,11 @@ class Daemon:
     def attached(self):
         return [role for role in self.roles.values() if role.dev is not None]
 
-    def scan(self):
+    def scan(self, force=False):
+        sig = self.source.signature()
+        if not force and sig is not None and sig == self._scan_sig:
+            return
+        self._scan_sig = sig
         devs = self.source.scan()
         busy = {role.dev.path for role in self.attached()}
         listing = [{"selector": selector_for(d, devs), "name": d.name.strip(), "id": vidpid(d),
@@ -656,6 +682,7 @@ class Daemon:
 
     def attach(self, role, dev):
         role.dev, role.phys, role.last = dev, PhysState(dev), None
+        role.dropping, role.drops = False, 0
         role.nodes = self.source.nodes(dev)
         self.log(f"{role.name}: {role.phys.name} {role.phys.id} at {dev.path}"
                  + (" (exposed to games)" if role.exposed else
@@ -758,7 +785,7 @@ class Daemon:
                 if r.selector is None:
                     self._drop_uhid(r)
         self._persist({ROLE_CONFIG[r]: self.roles[r].selector or "" for r in ROLES})
-        self.scan()
+        self.scan(force=True)
         self.send_hello()
 
     def expose(self, role_name, on):
@@ -845,8 +872,37 @@ class Daemon:
                 return bool(self.attached())
             time.sleep(0.5)
 
+    def feed(self, role, events):
+        """Apply a batch of evdev events to a role's stick; True if its state changed. After a
+        SYN_DROPPED the kernel has thrown events away (maybe a button release), so skip up to the
+        next SYN_REPORT and re-read the full state, as the evdev documentation prescribes."""
+        changed = False
+        for ev in events:
+            if ev.type == E.EV_SYN:
+                if ev.code == E.SYN_DROPPED:
+                    role.dropping = True
+                    role.drops += 1
+                elif ev.code == E.SYN_REPORT and role.dropping:
+                    role.dropping = False
+                    try:
+                        role.phys.resync(role.dev)
+                    except OSError as e:
+                        self.log(f"{role.name}: could not re-read the stick state: {e}")
+                    changed = True
+            elif not role.dropping and role.phys.feed(ev):
+                changed = True
+        return changed
+
+    def log_drops(self):
+        for role in self.roles.values():
+            if role.drops:
+                self.log(f"{role.name}: kernel event buffer overflowed {role.drops} time(s); "
+                         f"re-read the stick state")
+                role.drops = 0
+
     def run(self):
         last_sent, next_check, next_scan = 0.0, 0.0, time.monotonic() + self.SCAN_EVERY
+        next_drop_log = 0.0
         try:
             while not self.stop:
                 now = time.monotonic()
@@ -856,6 +912,9 @@ class Daemon:
                 if now >= next_scan:
                     next_scan = now + self.SCAN_EVERY
                     self.scan()
+                    if now >= next_drop_log:
+                        next_drop_log = now + 60
+                        self.log_drops()
                 if self.tick:
                     self.tick(now)
 
@@ -894,9 +953,8 @@ class Daemon:
                                 raise
                             self.detach(role, "disconnected")
                             continue
-                        for ev in events:
-                            if ev.type != E.EV_SYN and role.phys.feed(ev):
-                                self.dirty = True
+                        if self.feed(role, events):
+                            self.dirty = True
                     elif fd in self.extra_fds:
                         self.extra_fds[fd]()
                     elif fd == self.ctl.sock.fileno():

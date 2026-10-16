@@ -63,7 +63,7 @@ if os.path.exists(mp):
         conv = " (old format, converted on load)" if raw.get("version", 1) < mm.get("version", 1) else ""
         print(f"  mapping.json OK{conv}: profiles {list(mm['profiles'])}, active {mm['active']!r}")
         p = mm["profiles"][mm["active"]]
-        for r, sec in (p.items() if "stick" in p else [("stick", p)]):
+        for r, sec in ([(r, p[r]) for r in ("stick", "throttle") if r in p] if "stick" in p else [("stick", p)]):
             cross = sum(1 for v in [*sec["buttons"].values(), *sec["hat"].values()] for s in v if isinstance(s, str) and ":" in s and not s.startswith("hat:"))
             axes = ", ".join("%s: %s" % (k, v["src"]) for k, v in sec["axes"].items())
             print(f"    {r}: {sec['button_count']} buttons, axes {{{axes}}}"
