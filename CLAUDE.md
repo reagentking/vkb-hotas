@@ -219,6 +219,12 @@ virtual device is destroyed and re-created when its `button_count` changes the H
 - Exposing removes the virtual device and persists across restarts. It started CLI only
   (`vkb-mapper --expose/--hide`); the user later asked for it in the GUI too: a VIRTUAL/REAL badge
   per tab and a "Games see: Virtual | Real stick" switch (stick panel and Devices dialog).
+- Automatic "one throttle": while the throttle role has a selector (connected or not), the
+  T.16000M Slider ignores a source on the stick's *own* stick and rests at its idle end (0, or top
+  with Invert): `Mapper.idle`, set by `Daemon._update_idle()` (init and `select`), reported as
+  `hello.roles.stick.emulated.idle`; the page shows "OFF · throttle stick set". The mapping is
+  untouched. User chose: automatic (not a one-time mapping edit), idle end (not centre), "selected"
+  (not "connected"), T.16000M only (not the Xbox triggers).
 - Xbox mode: a third "Games see" choice per stick (not tied to profiles, not always-on next to the
   T.16000M); **one shared pad** for both sticks; flight-style defaults (stick → left stick, twist →
   right X, lever split back half LT / front half RT).
@@ -321,7 +327,7 @@ guards, and keeps them:
   13 = game defaults (`GET /api/references`, a profile's optional `reference`);
   14 = user game defaults (`PUT`/`DELETE /api/references/u-…`); 15 = two-stage triggers (section
   `stages`; an older server's normalizer would drop them on save); 16 = Xbox controller mode (the
-  `xbox` section, `/api/mode`, `--xbox`).
+  `xbox` section, `/api/mode`, `--xbox`); 17 = `twcs-side` / `twcs-front` drawings.
 - **Two-stage triggers:** physically a full pull always passes through stage 1, so remapping alone
   can't free stage 2's button. `PhysState.active(n, now)` treats a `stages` stage-1 button as
   released while its stage-2 button is held, and (with `delay`) until held `delay` ms; the loop's
@@ -404,6 +410,11 @@ guards, and keeps them:
     - `evo-ot-straight` is the whole stick without the OTA bracket and tilt (the user asked for it):
       the page builds it from `evo-ot-side` by string replacement (shorter mast, grip group at
       `translate(200 300) scale(-1 1)`), so grip fixes apply to both. Not a default view.
+    - `twcs-side` / `twcs-front`: the Thrustmaster TWCS Throttle (user's request, for throttles that
+      aren't Omni Throttles), laid out from Thrustmaster's manual and the HOTAS wiki: thumb cluster
+      8-way POV + 4-way hats (B7-10, B11-14) + thumb B1; mini-stick (push B6); middle-finger
+      rocker switch B4/B5; ring B3, pinky B2, wheel on the pinky side; rudder paddle low. Left-hand
+      only, so no `-l` variants; not a default view. Schematic, not traced from a photo.
     - `grip-front` / `grip-back` / `base` are generic outlines for other sticks.
     - Pins are always placed by the user, never pre-filled, because button numbering differs per
       grip and firmware.

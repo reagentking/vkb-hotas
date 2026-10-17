@@ -93,6 +93,10 @@ example, press a button and check `out.b` has the mapped bit set, or send
   "Xbox controller" section with the same choices as checkboxes (the confirm dialog opens on top); `state.xbox.out.b` follows `fake_press` on a stick in xbox mode only, and
   `{"cmd":"pulse","role":"xbox","button":"START"}` lights bit 7. CLI: `VKB_HOTAS_CTL=…
   mapper/vkb-mapper.py --xbox throttle / --hide all / --status`.
+- **One throttle:** selecting a throttle stick (Devices or `selectDevice('throttle', '231d:3201', …)`)
+  adds "OFF · throttle stick set" to the T.16000M SLIDER row and `live.roles.stick.out.a.SLIDER`
+  drops to 0 (top with Invert); a SLIDER sourced from `THR Z` stays live; clearing the throttle
+  removes the note and the lever drives SLIDER again.
 - **Two-stage triggers:** + Two-stage trigger adds a row (saved as the section's `stages` in
   `DIR/mapping.json`); a duplicate stage 1 or equal buttons shows a warning and the save fails
   cleanly; Remove and the Delay box persist across reload. Behaviour: open the socket, read

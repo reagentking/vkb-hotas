@@ -144,6 +144,12 @@ each tab has its own panels:
   - Axes: pick the source (either stick's axes; or **Learn** by moving it), invert, and set
     a center deadzone. The TWCS defaults suit a left-hand Omni Throttle: lever → throttle,
     grip mini-stick → mini-stick, twist → rocker.
+  - **One throttle at a time:** while a stick is selected as the TWCS Throttle (even if it's
+    unplugged for a moment), the right stick's own throttle lever stops driving the T.16000M
+    **Slider**, so games don't get two throttles. The Slider rests at its idle end (the
+    minimum, or the maximum if its **Invert** is on), and its row says **OFF · throttle stick
+    set**. Your mapping isn't changed: set the throttle to none and the lever works again. A
+    Slider you've mapped to the throttle stick stays live.
 - **Stick map:** a picture of your stick with a pin on each button. Pins glow when pressed and are
   tagged with what they drive; hover one for details, and its game-button card lights up (and vice
   versa). Click **Place pins**, press a button on the stick, then click where it is (drag to adjust,
@@ -151,8 +157,10 @@ each tab has its own panels:
   keep their size on screen, so small hats are easy to hit, and **FIT** shows the whole picture.
   The default views are drawings of the Gladiator NXT EVO Omni Throttle (whole stick, SCG grip
   head, triggers in side profile, base front), mirrored for the throttle stick. A **Straight
-  stick** drawing (same grip, no Omni Throttle angle) is available for each hand, and generic
-  outlines for other sticks. Each real stick has its own stick map.
+  stick** drawing (same grip, no Omni Throttle angle) is available for each hand, plus a
+  **Thrustmaster TWCS Throttle** in two views (thumb side with the hats, and front with the
+  mini-stick, rocker switch, wheel and rudder paddle) for throttles that aren't Omni Throttles,
+  and generic outlines for other sticks. Each real stick has its own stick map.
   **Pins belong to the picture**: each drawing and each photo keeps its own pins, so changing a
   view's drawing shows that drawing's pins and changing back restores the old ones. Add your own
   views, and swap any drawing for a photo of your stick with **Photo…** (PNG/JPEG/WebP, up to

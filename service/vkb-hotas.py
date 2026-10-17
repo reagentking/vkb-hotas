@@ -377,6 +377,7 @@ class Mapper:
     def __init__(self, role):
         self.role = role
         self.pulses = {}
+        self.idle = set()  # axes held at their idle end while fed from this role's own stick (Daemon._update_idle)
         self.apply(default_role_profile(role))
 
     def apply(self, profile):
@@ -397,6 +398,8 @@ class Mapper:
     def _axis(self, phys, dst):
         role, name, invert, dz = self.axes.get(dst, (None, None, False, 0))
         top = self.spec["axes"][dst]
+        if dst in self.idle and role == self.role:
+            return top if invert else 0  # idle end; Invert says which end that is
         p = phys.get(role) if role else None
         f = p.fraction(name) if p else None
         if f is None:
@@ -777,6 +780,7 @@ class Daemon:
         self.extra_fds = {}             # fd -> callable(), for the fake daemon
         self._scan_sig = None           # source.signature() at the last scan
         self._apply(self.fallback)
+        self._update_idle()
 
     # -- devices --
     def phys(self):
@@ -876,6 +880,13 @@ class Daemon:
             role.uhid.destroy()
             role.uhid = None
 
+    def _update_idle(self):
+        """While a throttle stick is selected (the TWCS role has a selector, connected or not), the
+        right stick's own throttle lever no longer drives the T.16000M Slider: it rests at its idle
+        end, so games don't get two throttles. The mapping is untouched; clearing the throttle
+        brings it back. A Slider sourced from the throttle stick stays live."""
+        self.roles["stick"].mapper.idle = {"SLIDER"} if self.roles["throttle"].selector is not None else set()
+
     def _update_pad(self):
         """The pad appears when a stick in "xbox" mode attaches and, like the Thrustmaster devices,
         stays while it's unplugged; it goes when no configured stick is in "xbox" mode."""
@@ -966,6 +977,7 @@ class Daemon:
         self._persist({ROLE_CONFIG[r]: self.roles[r].selector or "" for r in ROLES})
         self.scan(force=True)
         self._update_pad()
+        self._update_idle()
         self.send_hello()
 
     def expose(self, role_name, on):
@@ -1042,7 +1054,7 @@ class Daemon:
                         "device": role.phys.info() if role.phys else None,
                         "emulated": {"name": spec["name"], "id": f"{spec['vid']:04x}:{spec['pid']:04x}",
                                      "buttons": spec["buttons"], "axes": dict(spec["axes"]),
-                                     "active": role.uhid is not None}}
+                                     "idle": sorted(role.mapper.idle), "active": role.uhid is not None}}
         xbox = {"name": XBOX_NAME, "id": f"{XBOX_ID[0]:04x}:{XBOX_ID[1]:04x}", "active": self.pad is not None,
                 "buttons": list(XBOX_BUTTONS), "axes": dict(XBOX_TOP)}
         return {"t": "hello", "roles": roles, "xbox": xbox, "devices": self.devices, "profile": self.profile_name,
