@@ -513,6 +513,13 @@ function renderEmuAxes() {
       n.title = `A stick is selected as the ${ROLE_INFO.throttle.emuShort} Throttle, so this stick's own throttle doesn't drive ${ax}: it rests at its idle end (the other end if Invert is on), so games don't get two throttles. Your mapping is kept; with no throttle stick, it works again.`;
       nm.append(n); row.classList.add("idled");
     }
+    // the daemon feeds triggers set to the right stick's throttle from the throttle stick's instead
+    const lv = hello?.xbox?.lever;
+    if (role === "xbox" && XB_TRIGGERS.includes(ax) && lv && cfg.src && srcSplit(cfg.src).join(":") === lv.from) {
+      const n = el("small", "idlenote", `NOW FROM ${ROLE_INFO.throttle.short} ${lv.to.split(":")[1].replace("ABS_", "")}`);
+      n.title = `The throttle stick feeds the Xbox controller, so this trigger takes the throttle stick's throttle (${lv.to.replace("throttle:", "")}) instead of the right stick's (${lv.from.replace("stick:", "")}), keeping its half and Invert settings. Your mapping is kept; it goes back when the throttle stick stops feeding the pad.`;
+      nm.append(n);
+    }
     const sel = el("select"); sel.title = "Source axis (THR/STK = on the other stick)";
     for (const n of ["", ...physAxes]) { const o = el("option", null, n ? axLabel(n) : "— none —"); o.value = n; o.selected = (cfg.src || "") === n; sel.append(o); }
     if (cfg.src && !physAxes.includes(cfg.src)) { const o = el("option", null, axLabel(cfg.src) + " (missing)"); o.value = cfg.src; o.selected = true; sel.append(o); }
@@ -1750,7 +1757,7 @@ function connect() {
     if (m.t === "state") onState(m);
     else if (m.t === "hello") {
       if (!m.roles) { hello = null; live = null; setPill(false, "DAEMON OUT OF DATE"); toast("The vkb-hotas service is an older version: reinstall it (sudo ./install.sh).", true); return; }
-      const sig = h => JSON.stringify([...ROLES.map(r => [h.roles[r].device?.id, h.roles[r].device?.buttons, h.roles[r].device?.axes?.length, h.roles[r].emulated?.idle]), !!h.xbox]);
+      const sig = h => JSON.stringify([...ROLES.map(r => [h.roles[r].device?.id, h.roles[r].device?.buttons, h.roles[r].device?.axes?.length, h.roles[r].emulated?.idle]), !!h.xbox, h.xbox?.lever]);
       const changed = !hello || sig(hello) !== sig(m); hello = m;
       renderRoleTabs(); renderBanners(); if (!$("#devModal").hidden) renderDevices();
       setPill(true, "LIVE · " + m.profile.toUpperCase());

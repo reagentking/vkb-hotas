@@ -254,6 +254,11 @@ and Proton hands it to the game as an XInput controller.
     Guide is unassigned (it usually opens the Steam overlay).
   - **LT (full)** / **RT (full)** cards let a button pull a trigger all the way, e.g. the
     stick's trigger as RT.
+  - **With a throttle stick:** while it's set to Xbox too, triggers set to the right stick's
+    throttle take the throttle stick's throttle instead (the one the TWCS uses as its throttle),
+    keeping their half and Invert settings; their rows say **NOW FROM THR Z**. Your mapping isn't
+    changed, and a trigger you've pointed somewhere else is left alone. Assign the throttle's
+    buttons on the Xbox tab as you like (they show a THR tag).
 - **Proton:** don't run `proton-setup.py` for a game you play in Xbox mode. It turns off
   Proton's SDL gamepad support in that game's prefix (needed for the Thrustmaster devices),
   and SDL is what presents the pad to the game as an Xbox controller. Already did? Undo it

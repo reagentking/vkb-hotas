@@ -225,6 +225,11 @@ virtual device is destroyed and re-created when its `button_count` changes the H
   `hello.roles.stick.emulated.idle`; the page shows "OFF · throttle stick set". The mapping is
   untouched. User chose: automatic (not a one-time mapping edit), idle end (not centre), "selected"
   (not "connected"), T.16000M only (not the Xbox triggers).
+- Its pad counterpart, asked for separately: while the throttle role has a selector *and* is in
+  xbox mode, `XboxMapper.lever = (from, to)` makes LT/RT whose source is the T.16000M Slider's
+  own-stick source read the TWCS Z source instead (halves/invert kept; any other trigger source is
+  left alone; no lever when either source is missing). Computed in `Daemon._update_idle()` (also on
+  `set_mode` and `_apply`), reported as `hello.xbox.lever`; the page notes "NOW FROM THR Z".
 - Xbox mode: a third "Games see" choice per stick (not tied to profiles, not always-on next to the
   T.16000M); **one shared pad** for both sticks; flight-style defaults (stick → left stick, twist →
   right X, lever split back half LT / front half RT).

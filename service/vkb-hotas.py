@@ -443,6 +443,7 @@ class XboxMapper:
 
     def __init__(self):
         self.pulses = {}
+        self.lever = None  # (from, to) axis-source pairs: triggers on the right stick's throttle use the throttle stick's
         self.apply(default_xbox_profile())
 
     def apply(self, profile):
@@ -455,6 +456,8 @@ class XboxMapper:
     def _axis(self, phys, dst):
         top, trig = XBOX_TOP[dst], dst in XBOX_TRIGGERS
         role, name, invert, dz, half = self.axes.get(dst, (None, None, False, 0, None))
+        if trig and self.lever and (role, name) == self.lever[0]:
+            role, name = self.lever[1]  # a throttle stick feeds the pad: its throttle drives the triggers
         p = phys.get(role) if role else None
         f = p.fraction(name) if p else None
         if f is None:
@@ -780,7 +783,6 @@ class Daemon:
         self.extra_fds = {}             # fd -> callable(), for the fake daemon
         self._scan_sig = None           # source.signature() at the last scan
         self._apply(self.fallback)
-        self._update_idle()
 
     # -- devices --
     def phys(self):
@@ -885,7 +887,18 @@ class Daemon:
         right stick's own throttle lever no longer drives the T.16000M Slider: it rests at its idle
         end, so games don't get two throttles. The mapping is untouched; clearing the throttle
         brings it back. A Slider sourced from the throttle stick stays live."""
-        self.roles["stick"].mapper.idle = {"SLIDER"} if self.roles["throttle"].selector is not None else set()
+        st, th = self.roles["stick"], self.roles["throttle"]
+        st.mapper.idle = {"SLIDER"} if th.selector is not None else set()
+        # The pad's triggers follow suit while the throttle stick feeds the pad: LT/RT sourced from
+        # the right stick's throttle (the T.16000M Slider's own-stick source) read the throttle
+        # stick's throttle (the TWCS Z source) instead. Mapping untouched; halves/invert kept.
+        lever = None
+        if th.selector is not None and th.mode == "xbox":
+            frm = split_source("stick", st.mapper.profile["axes"]["SLIDER"]["src"] or "")
+            to = split_source("throttle", th.mapper.profile["axes"]["Z"]["src"] or "")
+            if frm[0] == "stick" and frm[1] and to[1]:
+                lever = (frm, to)
+        self.pad_mapper.lever = lever
 
     def _update_pad(self):
         """The pad appears when a stick in "xbox" mode attaches and, like the Thrustmaster devices,
@@ -923,16 +936,17 @@ class Daemon:
 
     # -- mapping --
     def _apply(self, profile):
+        self.pad_mapper.apply(profile["xbox"])
         for r, role in self.roles.items():
             old = role.mapper.spec["buttons"]
             role.mapper.apply(profile[r])
-            self.pad_mapper.apply(profile["xbox"])
             role.stages = {s["first"]: (s["second"], s["delay"] / 1000) for s in profile[r].get("stages", [])}
             if role.phys is not None:
                 role.phys.stages = role.stages
             if role.uhid is not None and role.mapper.spec["buttons"] != old:
                 self._drop_uhid(role)  # descriptor changes: recreate the virtual device
                 self._ensure_uhid(role)
+        self._update_idle()  # its sources come from the profile
 
     def poll_mapping(self):
         change = self.watcher.poll() if self.watcher else None
@@ -1008,6 +1022,7 @@ class Daemon:
                                          "xbox": "feeds the virtual Xbox controller",
                                          "virtual": "emulates the " + EMULATED_NAMES[role.name]}[mode])
         self._update_pad()
+        self._update_idle()
         self._update_hiding()
         self._persist(mode_config({r: self.roles[r].mode for r in ROLES}))
         self.send_hello()
@@ -1055,7 +1070,9 @@ class Daemon:
                         "emulated": {"name": spec["name"], "id": f"{spec['vid']:04x}:{spec['pid']:04x}",
                                      "buttons": spec["buttons"], "axes": dict(spec["axes"]),
                                      "idle": sorted(role.mapper.idle), "active": role.uhid is not None}}
+        lever = self.pad_mapper.lever
         xbox = {"name": XBOX_NAME, "id": f"{XBOX_ID[0]:04x}:{XBOX_ID[1]:04x}", "active": self.pad is not None,
+                "lever": {"from": f"{lever[0][0]}:{lever[0][1]}", "to": f"{lever[1][0]}:{lever[1][1]}"} if lever else None,
                 "buttons": list(XBOX_BUTTONS), "axes": dict(XBOX_TOP)}
         return {"t": "hello", "roles": roles, "xbox": xbox, "devices": self.devices, "profile": self.profile_name,
                 "mapping": self.watcher.path if self.watcher else None,

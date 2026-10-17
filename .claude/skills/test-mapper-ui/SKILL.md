@@ -96,7 +96,9 @@ example, press a button and check `out.b` has the mapped bit set, or send
 - **One throttle:** selecting a throttle stick (Devices or `selectDevice('throttle', '231d:3201', …)`)
   adds "OFF · throttle stick set" to the T.16000M SLIDER row and `live.roles.stick.out.a.SLIDER`
   drops to 0 (top with Invert); a SLIDER sourced from `THR Z` stays live; clearing the throttle
-  removes the note and the lever drives SLIDER again.
+  removes the note and the lever drives SLIDER again. With `--throttle 231d:3201` and both sticks
+  set to Xbox, the Xbox tab's LT/RT rows say "NOW FROM THR Z" (not with only the stick in Xbox);
+  `hello.xbox.lever` is `{from: "stick:ABS_Z", to: "throttle:ABS_Z"}`.
 - **Two-stage triggers:** + Two-stage trigger adds a row (saved as the section's `stages` in
   `DIR/mapping.json`); a duplicate stage 1 or equal buttons shows a warning and the save fails
   cleanly; Remove and the Delay box persist across reload. Behaviour: open the socket, read
