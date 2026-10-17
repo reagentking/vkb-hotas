@@ -98,6 +98,9 @@ example, press a button and check `out.b` has the mapped bit set, or send
   cleanly; Remove and the Delay box persist across reload. Behaviour: open the socket, read
   `state` lines, send `fake_press` 1 then 2 within the hold time; `raw.b` should go `[1]`,
   `[1,2]`, `[2]` while `out.b` goes `1`, `2`, `2` (stage 1 dropped while stage 2 is held).
+  Assign with a trigger set up: `press 1`, then `press 2` within the hold assigns BTN 2; `press 1`
+  alone assigns BTN 1 only after the release (the learn hint names both stages meanwhile). For
+  exact steps, call `detectLearn` in the page with fabricated `{roles:{stick:{raw:{b:[…],h:[0,0],a:{}}}}}`.
 - **Stick map:**
   - pins land where clicked (also when zoomed);
   - each picture shows only its own pins;

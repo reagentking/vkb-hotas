@@ -1002,6 +1002,14 @@ function detectLearn(m) {
     if (best) { prof().axes[learn.axis].src = best; toast(`${learn.axis} ← ${best.replace(/^(stick|throttle):/, m => ROLE_INFO[m.slice(0, -1)].short + " ").replace("ABS_", "")}`); stopLearn(); scheduleSave(); renderEmuAxes(); }
     return;
   }
+  // stage 1 of a two-stage trigger is pressed on the way to stage 2: wait until stage 2 closes
+  // (assign stage 2) or stage 1 is let go alone (assign stage 1)
+  if (learn.held) {
+    const h = learn.held, b = now[h.r]?.b || [];
+    if (b.includes(h.second)) { assign(learn.kind, learn.key, srcJoin(h.r, h.second), learn.add); stopLearn(); }
+    else if (!b.includes(h.first)) { assign(learn.kind, learn.key, srcJoin(h.r, h.first), learn.add); stopLearn(); }
+    return;
+  }
   let src = null;
   for (const r of [physRole(), otherRole(physRole())]) {
     const raw = now[r], base = learn.base[r]; if (!raw || !base) continue;
@@ -1010,6 +1018,13 @@ function detectLearn(m) {
       const [x, y] = raw.h, [bx, by] = base.h;
       if (y < 0 && by >= 0) s = "hat:up"; else if (y > 0 && by <= 0) s = "hat:down";
       else if (x < 0 && bx >= 0) s = "hat:left"; else if (x > 0 && bx <= 0) s = "hat:right";
+    }
+    const st = typeof s === "number" && (profR(r).stages || []).find(x => x.first === s);
+    if (st && raw.b.includes(st.second)) s = st.second;  // both stages arrived in one update
+    else if (st) {
+      learn.held = {r, first: s, second: st.second};
+      $("#learnSub").textContent = `Button ${s} is stage 1 of a two-stage trigger: pull through for stage 2 (button ${st.second}), or let go to use stage 1.`;
+      return;
     }
     if (s != null) { src = srcJoin(r, s); break; }
   }

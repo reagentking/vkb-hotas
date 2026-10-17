@@ -328,7 +328,10 @@ guards, and keeps them:
   poll timeout follows `PhysState.pending()` so a delayed stage 1 turns on on time. It filters
   the real stick's buttons before mapping, so every output fed from stage 1 (also cross-mapped
   ones) follows it; `raw` in the state stream stays unfiltered. User chose: release while stage 2
-  is held, zero delay by default, optional delay.
+  is held, zero delay by default, optional delay. Learn/Assign (`detectLearn`) would otherwise
+  always catch stage 1 first, so a new press that is a configured stage 1 sets `learn.held` and
+  waits: stage 2 closing assigns stage 2, stage 1 released alone assigns stage 1. Place pins
+  needs no special case (it keeps the latest new button, which ends up being stage 2).
 - The page is one self-contained file (CSP forbids external resources). Physical inputs are amber
   and emulated/game outputs are cyan.
 - **Stick map:** layout and photos are owned by the mapper server alone; the daemon never reads them.

@@ -176,6 +176,8 @@ each tab has its own panels:
   separately. Stage 1 still sends instantly; a full pull shows stage 1 only for the instant
   before stage 2 closes. To hide even that, set a **Delay** (ms): stage 1 then only counts once
   held that long, which adds that much lag to it. Set per profile and per stick.
+  **Assign** knows about it too: after **Assign**, pull through to assign stage 2, or press and
+  let go of stage 1 to assign stage 1 (it waits for one or the other).
 - **5-way hat badges:** a chip whose button belongs to a 5-way hat shows the hat and direction,
   e.g. `BTN 11 · Hat 2 ▲`.
 - **Game defaults:** pick a game in **Game defaults** (profile bar) and every card shows, read-only,
