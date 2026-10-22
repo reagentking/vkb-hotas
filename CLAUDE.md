@@ -23,12 +23,17 @@ sticks, a role can instead feed one shared virtual **Xbox 360 controller** (uinp
 but shows controller button icons, and in-flight behaviour hasn't been confirmed yet. If AC8
 treats the T.16000M badly, the planned fallback is emulating a Logitech X56 instead.
 Project Wingman (appid 895870) opens the stick and receives input once its prefix is set up with
-`proton-setup.py 895870`; controls are bound in the game's own menu. The throttle role has only been
-tested against simulated sticks: the user doesn't own the left-hand OT yet, and its product id
-(`231d:3201` in the fake daemon) is a guess. Xbox mode is tested with simulated sticks; a real
-uinput pad couldn't be created from the user session before install (`/dev/uinput` gave ENODEV:
-module not loaded, and unprivileged opens don't autoload it), so SDL recognition is checked after
-install.
+`proton-setup.py 895870`; controls are bound in the game's own menu. The user now owns the
+left-hand OT: **`231d:3201`** ("VKBsim Gladiator EVO OT L", same 6 axes / hat / 79 buttons as the
+right one), confirming the fake daemon's id. They use its **Y axis as the throttle** (TWCS Z ←
+`ABS_Y`). A read-only run of the daemon's own code against it (no grab, uhid or config writes;
+right stick simulated) confirmed TWCS Z follows Y over the full range, the T.16000M Slider idles,
+in Xbox mode LT/RT follow Y's halves (via the lever redirect to `throttle:ABS_Y`), and buttons 1-14
+pass 1:1. Then live (the user selected it as the throttle, TWCS Z ← Y): both real sticks hidden,
+both virtual devices visible to SDL, and over 768 state updates the right lever's full travel left
+the T.16000M Slider at 0 while TWCS Z tracked Y exactly. Not yet tested in a game. The real
+uinput pad is confirmed: SDL3 reports it as "Xbox 360 Controller", type Xbox 360, and reads A,
+sticks, triggers and D-pad correctly (after a reboot; see the uinput gotcha).
 
 ## Repository layout
 

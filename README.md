@@ -37,8 +37,8 @@ returns to normal.
 | Star Wars: Squadrons (Proton Experimental) | game acquires and polls the stick |
 | Ace Combat 8 (Proton Hotfix) | game acquires and polls the stick; shows controller button icons; flight not yet confirmed |
 | Project Wingman (Proton Experimental) | game opens the stick and receives input; bind controls in the game's binding menu (click a binding, then move the axis or press the button) |
-| Second stick as TWCS Throttle | tested with simulated sticks only; not yet with real hardware or games |
-| Xbox controller mode | new: tested with simulated sticks; not yet in a game |
+| Second stick as TWCS Throttle | VKB Gladiator NXT EVO Omni Throttle (L), `231d:3201`: live: hidden and re-created as the TWCS, Y as its throttle, the right stick's lever handed off; Xbox triggers verified through the daemon's code; not yet in games |
+| Xbox controller mode | virtual pad recognised by SDL as an Xbox 360 controller; not yet in a game |
 
 Other VKB models should work after adjusting axes in HOTAS Mapper (or with `--axis`, see [Mapping](#mapping)).
 Reports from other sticks and games are welcome.
