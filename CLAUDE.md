@@ -225,11 +225,17 @@ virtual device is destroyed and re-created when its `button_count` changes the H
   (`vkb-mapper --expose/--hide`); the user later asked for it in the GUI too: a VIRTUAL/REAL badge
   per tab and a "Games see: Virtual | Real stick" switch (stick panel and Devices dialog).
 - Automatic "one throttle": while the throttle role has a selector (connected or not), the
-  T.16000M Slider ignores a source on the stick's *own* stick and rests at its idle end (0, or top
-  with Invert): `Mapper.idle`, set by `Daemon._update_idle()` (init and `select`), reported as
-  `hello.roles.stick.emulated.idle`; the page shows "OFF · throttle stick set". The mapping is
-  untouched. User chose: automatic (not a one-time mapping edit), idle end (not centre), "selected"
-  (not "connected"), T.16000M only (not the Xbox triggers).
+  T.16000M Slider ignores a source on the stick's *own* stick and is held per the stick section's
+  `slider_with_throttle`: `centre` (default, `top // 2` like an unmapped axis), `idle` (0, or top
+  with Invert) or `live`. `Mapper.held {axis: mode}`, set by `Daemon._update_idle()` (init,
+  `select`, `set_mode`, `_apply`), reported as `hello.roles.stick.emulated.held`; the page shows a
+  "With a throttle stick" dropdown on the Slider row and a CENTRED / AT IDLE END note. The mapping
+  is untouched. User chose: automatic (not a one-time mapping edit), "selected" (not "connected"),
+  T.16000M only (not the Xbox triggers), a per-profile dropdown. It first held the **idle end**
+  (the user's pick), but in Ace Combat 8 the throttle then never went below half: the Proton log's
+  raw reports showed the TWCS Z covering 0-16383 while the T.16000M Slider sat at 0, and AC8 sums
+  the two as accelerate/brake axes (0 = forward = full accelerate). Setting the Slider to "— none —"
+  (centre) fixed it in game, so centre became the default.
 - Its pad counterpart, asked for separately: while the throttle role has a selector *and* is in
   xbox mode, `XboxMapper.lever = (from, to)` makes LT/RT whose source is the T.16000M Slider's
   own-stick source read the TWCS Z source instead (halves/invert kept; any other trigger source is
@@ -337,7 +343,8 @@ guards, and keeps them:
   13 = game defaults (`GET /api/references`, a profile's optional `reference`);
   14 = user game defaults (`PUT`/`DELETE /api/references/u-…`); 15 = two-stage triggers (section
   `stages`; an older server's normalizer would drop them on save); 16 = Xbox controller mode (the
-  `xbox` section, `/api/mode`, `--xbox`); 17 = `twcs-side` / `twcs-front` drawings.
+  `xbox` section, `/api/mode`, `--xbox`); 17 = `twcs-side` / `twcs-front` drawings;
+  18 = `slider_with_throttle` (an older server's normalizer would drop it on save).
 - **Two-stage triggers:** physically a full pull always passes through stage 1, so remapping alone
   can't free stage 2's button. `PhysState.active(n, now)` treats a `stages` stage-1 button as
   released while its stage-2 button is held, and (with `delay`) until held `delay` ms; the loop's

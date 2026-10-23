@@ -507,10 +507,14 @@ function renderEmuAxes() {
     const row = el("div", "axc"); row.dataset.axis = ax;
     const nm = el("div", "nm", ax); nm.append(el("small", null, desc));
     { const g = refField("axes", ax, "small"); if (g) nm.append(g); }
-    // the daemon holds this axis at idle while it's fed by this stick and a throttle stick is set
-    if (role !== "xbox" && cfg.src && srcSplit(cfg.src)[0] === role && emuInfo()?.idle?.includes(ax)) {
-      const n = el("small", "idlenote", `OFF · throttle stick set`);
-      n.title = `A stick is selected as the ${ROLE_INFO.throttle.emuShort} Throttle, so this stick's own throttle doesn't drive ${ax}: it rests at its idle end (the other end if Invert is on), so games don't get two throttles. Your mapping is kept; with no throttle stick, it works again.`;
+    // the daemon holds this axis while it's fed by this stick and a throttle stick is set (slider_with_throttle)
+    const held = role !== "xbox" && cfg.src && srcSplit(cfg.src)[0] === role ? emuInfo()?.held?.[ax] : null;
+    if (held) {
+      const n = el("small", "idlenote", held === "centre" ? "CENTRED · throttle stick set" : "AT IDLE END · throttle stick set");
+      n.title = `A stick is selected as the ${ROLE_INFO.throttle.emuShort} Throttle, so this stick's own throttle doesn't drive ${ax} and games don't get two throttles. ` +
+        (held === "centre" ? "It rests in the middle, which games that treat it as accelerate/brake (like Ace Combat 8) read as neutral."
+                           : "It rests at its idle end (the other end if Invert is on), for games that read it as a plain 0-100% throttle.") +
+        " Change this with “With a throttle stick”. Your mapping is kept; with no throttle stick, the lever works again.";
       nm.append(n); row.classList.add("idled");
     }
     // the daemon feeds triggers set to the right stick's throttle from the throttle stick's instead
@@ -535,6 +539,13 @@ function renderEmuAxes() {
     const lb = el("button", "btn small", "Learn"); lb.title = "Then move the axis you want";
     lb.onclick = e => startLearn({type:"axis", axis:ax}, e);
     const extra = [];
+    if (role === "stick" && ax === "SLIDER" && cfg.src && srcSplit(cfg.src)[0] === "stick") {  // only matters for the stick's own lever
+      const ws = el("select"); ws.title = "With a throttle stick: what this Slider does while a stick is selected as the TWCS Throttle (saved per profile)";
+      for (const [v, t] of [["centre", "With a throttle stick: centre"], ["idle", "With a throttle stick: idle end"], ["live", "With a throttle stick: keep live"]]) {
+        const o = el("option", null, t); o.value = v; o.selected = (prof().slider_with_throttle || "centre") === v; ws.append(o); }
+      ws.onchange = () => { prof().slider_with_throttle = ws.value; scheduleSave(); };
+      extra.push(ws);
+    }
     if (role === "xbox" && XB_TRIGGERS.includes(ax)) {  // drive a trigger from half of an axis, e.g. the throttle lever over LT + RT
       const hs = el("select"); hs.title = "Which part of the source axis drives this trigger (Invert flips which end is “back”)";
       for (const [v, t] of [["", "Full travel"], ["low", "Back half"], ["high", "Front half"]]) { const o = el("option", null, t); o.value = v; o.selected = (cfg.half || "") === v; hs.append(o); }
@@ -1084,6 +1095,7 @@ function freshRole(r, count) {
   for (const [ax] of ROLE_INFO[r].axes) p.axes[ax] = {src: ROLE_INFO[r].defaults[ax] || null, invert:false, deadzone:0};
   for (let i = 1; i <= p.button_count; i++) p.buttons[i] = [i];
   for (const [d] of HATS) p.hat[d] = [`hat:${d}`];
+  if (r === "stick") p.slider_with_throttle = "centre";
   return p;
 }
 function freshXbox() {
@@ -1757,7 +1769,7 @@ function connect() {
     if (m.t === "state") onState(m);
     else if (m.t === "hello") {
       if (!m.roles) { hello = null; live = null; setPill(false, "DAEMON OUT OF DATE"); toast("The vkb-hotas service is an older version: reinstall it (sudo ./install.sh).", true); return; }
-      const sig = h => JSON.stringify([...ROLES.map(r => [h.roles[r].device?.id, h.roles[r].device?.buttons, h.roles[r].device?.axes?.length, h.roles[r].emulated?.idle]), !!h.xbox, h.xbox?.lever]);
+      const sig = h => JSON.stringify([...ROLES.map(r => [h.roles[r].device?.id, h.roles[r].device?.buttons, h.roles[r].device?.axes?.length, h.roles[r].emulated?.held]), !!h.xbox, h.xbox?.lever]);
       const changed = !hello || sig(hello) !== sig(m); hello = m;
       renderRoleTabs(); renderBanners(); if (!$("#devModal").hidden) renderDevices();
       setPill(true, "LIVE · " + m.profile.toUpperCase());
@@ -1779,7 +1791,7 @@ function connect() {
     const [r, l] = await Promise.all([api("GET", "/api/mapping"), api("GET", "/api/layout")]);
     try { const g = await api("GET", "/api/references"); gameRefs = g.references || {}; if (g.error) toast("Game defaults couldn't be read: " + g.error, true); } catch (e) { gameRefs = {}; }
     mapping = r.mapping;
-    if (l.api !== 17) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
+    if (l.api !== 18) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
       readOnly = true; layoutAll = layout = null;
       for (const [k, p] of Object.entries(mapping.profiles)) { if (!p.stick) mapping.profiles[k] = {stick: p, throttle: freshRole("throttle")}; mapping.profiles[k].xbox ||= freshXbox(); }
       for (const sel of [".maptools", ".stage"]) document.querySelector(sel).hidden = true;

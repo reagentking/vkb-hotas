@@ -50,7 +50,7 @@ PAGE = os.path.join(HERE, "vkb-mapper.html")
 GAME_DEFAULTS = os.path.join(HERE, "game-defaults.json")
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "vkb-mapper")
 IDLE_EXIT = 45  # seconds without any open UI before the server quits
-API_VERSION = 17  # bump when the page needs server features; the page refuses to save anything on a mismatch
+API_VERSION = 18  # bump when the page needs server features; the page refuses to save anything on a mismatch
 
 
 def initial_mapping():

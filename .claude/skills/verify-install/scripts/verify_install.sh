@@ -70,7 +70,8 @@ if os.path.exists(mp):
                                for s in sec.get("stages", []))
             print(f"    {r}: {sec['button_count']} buttons, axes {{{axes}}}"
                   + (f", {cross} sources on the other stick" if cross else "")
-                  + (f", two-stage triggers {stages}" if stages else ""))
+                  + (f", two-stage triggers {stages}" if stages else "")
+                  + (f", Slider with a throttle stick: {sec['slider_with_throttle']}" if "slider_with_throttle" in sec else ""))
         if "xbox" in p:
             x = p["xbox"]
             used = [b for b, v in x["buttons"].items() if v]

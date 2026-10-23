@@ -94,9 +94,12 @@ example, press a button and check `out.b` has the mapped bit set, or send
   `{"cmd":"pulse","role":"xbox","button":"START"}` lights bit 7. CLI: `VKB_HOTAS_CTL=…
   mapper/vkb-mapper.py --xbox throttle / --hide all / --status`.
 - **One throttle:** selecting a throttle stick (Devices or `selectDevice('throttle', '231d:3201', …)`)
-  adds "OFF · throttle stick set" to the T.16000M SLIDER row and `live.roles.stick.out.a.SLIDER`
-  drops to 0 (top with Invert); a SLIDER sourced from `THR Z` stays live; clearing the throttle
-  removes the note and the lever drives SLIDER again. With `--throttle 231d:3201` and both sticks
+  adds "CENTRED · throttle stick set" to the T.16000M SLIDER row and `live.roles.stick.out.a.SLIDER`
+  goes to 127; the row's "With a throttle stick" dropdown switches to idle end (0, top with Invert,
+  note "AT IDLE END") or keep live (no note, follows the lever) and saves `slider_with_throttle`;
+  the dropdown only shows while the SLIDER source is the stick's own axis; a SLIDER sourced from
+  `THR Z` or none is left alone; clearing the throttle removes the note and the lever drives SLIDER
+  again. With `--throttle 231d:3201` and both sticks
   set to Xbox, the Xbox tab's LT/RT rows say "NOW FROM THR Z" (not with only the stick in Xbox);
   `hello.xbox.lever` is `{from: "stick:ABS_Z", to: "throttle:ABS_Z"}`.
 - **Two-stage triggers:** + Two-stage trigger adds a row (saved as the section's `stages` in

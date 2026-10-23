@@ -146,10 +146,18 @@ each tab has its own panels:
     grip mini-stick → mini-stick, twist → rocker.
   - **One throttle at a time:** while a stick is selected as the TWCS Throttle (even if it's
     unplugged for a moment), the right stick's own throttle lever stops driving the T.16000M
-    **Slider**, so games don't get two throttles. The Slider rests at its idle end (the
-    minimum, or the maximum if its **Invert** is on), and its row says **OFF · throttle stick
-    set**. Your mapping isn't changed: set the throttle to none and the lever works again. A
-    Slider you've mapped to the throttle stick stays live.
+    **Slider**, so games don't get two throttles. What the Slider does instead is set per profile
+    with **With a throttle stick** on its row:
+    - **centre** (default): it rests in the middle. Games that treat the throttle as
+      accelerate/brake read that as neutral. Ace Combat 8 adds the T.16000M Slider to the TWCS
+      throttle, so a Slider held at an end kept the throttle from ever going below half.
+    - **idle end:** the minimum, or the maximum if its **Invert** is on, for games that read it
+      as a plain 0–100% throttle.
+    - **keep live:** the right lever keeps driving it.
+
+    The row says **CENTRED** or **AT IDLE END · throttle stick set** while it applies. Your
+    mapping isn't changed: set the throttle to none and the lever works again. A Slider you've
+    pointed elsewhere (**— none —**, the throttle stick) is left alone.
 - **Stick map:** a picture of your stick with a pin on each button. Pins glow when pressed and are
   tagged with what they drive; hover one for details, and its game-button card lights up (and vice
   versa). Click **Place pins**, press a button on the stick, then click where it is (drag to adjust,

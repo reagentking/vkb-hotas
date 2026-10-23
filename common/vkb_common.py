@@ -251,7 +251,14 @@ def default_role_profile(role, button_count=None, axes=None, invert=()):
         "hat": {d: [f"hat:{d}"] for d in HAT_DIRS},
         "labels": {},
         "stages": [],
+        **({"slider_with_throttle": "centre"} if role == "stick" else {}),
     }
+
+
+# What the T.16000M Slider does while a throttle stick is selected and the Slider is fed by the
+# stick's own lever: "centre" (neutral for games that read it as accelerate/brake, e.g. AC8),
+# "idle" (minimum, or maximum with invert: for games that read a plain 0-100% throttle) or "live".
+SLIDER_WITH_THROTTLE = ("centre", "idle", "live")
 
 
 # flight-style: stick -> left stick, twist -> right stick X, lever split over the triggers
@@ -354,6 +361,11 @@ def normalize_role_profile(role, p):
         raise ValueError("labels must be an object")
     out["labels"] = {str(k)[:16]: str(v)[:48] for k, v in labels.items() if str(v).strip()}
     out["stages"] = _stages(p.get("stages") or [])
+    if role == "stick":
+        mode = p.get("slider_with_throttle", "centre")
+        if mode not in SLIDER_WITH_THROTTLE:
+            raise ValueError(f"slider_with_throttle must be one of {', '.join(SLIDER_WITH_THROTTLE)}")
+        out["slider_with_throttle"] = mode
     return out
 
 

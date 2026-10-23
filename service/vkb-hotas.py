@@ -377,7 +377,7 @@ class Mapper:
     def __init__(self, role):
         self.role = role
         self.pulses = {}
-        self.idle = set()  # axes held at their idle end while fed from this role's own stick (Daemon._update_idle)
+        self.held = {}  # axis -> "centre" | "idle" while fed from this role's own stick (Daemon._update_idle)
         self.apply(default_role_profile(role))
 
     def apply(self, profile):
@@ -398,7 +398,10 @@ class Mapper:
     def _axis(self, phys, dst):
         role, name, invert, dz = self.axes.get(dst, (None, None, False, 0))
         top = self.spec["axes"][dst]
-        if dst in self.idle and role == self.role:
+        hold = self.held.get(dst) if role == self.role else None
+        if hold == "centre":
+            return top // 2  # neutral, like an axis with no source
+        if hold == "idle":
             return top if invert else 0  # idle end; Invert says which end that is
         p = phys.get(role) if role else None
         f = p.fraction(name) if p else None
@@ -884,11 +887,14 @@ class Daemon:
 
     def _update_idle(self):
         """While a throttle stick is selected (the TWCS role has a selector, connected or not), the
-        right stick's own throttle lever no longer drives the T.16000M Slider: it rests at its idle
-        end, so games don't get two throttles. The mapping is untouched; clearing the throttle
-        brings it back. A Slider sourced from the throttle stick stays live."""
+        right stick's own throttle lever no longer drives the T.16000M Slider, so games don't get two
+        throttles: per profile (`slider_with_throttle`) it rests at the centre (neutral for games
+        that read it as accelerate/brake, e.g. AC8, which adds it to the TWCS throttle), at its idle
+        end, or stays live. The mapping is untouched; clearing the throttle brings the lever back. A
+        Slider sourced from anything but the stick's own lever is left alone."""
         st, th = self.roles["stick"], self.roles["throttle"]
-        st.mapper.idle = {"SLIDER"} if th.selector is not None else set()
+        mode = st.mapper.profile.get("slider_with_throttle", "centre")
+        st.mapper.held = {"SLIDER": mode} if th.selector is not None and mode != "live" else {}
         # The pad's triggers follow suit while the throttle stick feeds the pad: LT/RT sourced from
         # the right stick's throttle (the T.16000M Slider's own-stick source) read the throttle
         # stick's throttle (the TWCS Z source) instead. Mapping untouched; halves/invert kept.
@@ -1069,7 +1075,7 @@ class Daemon:
                         "device": role.phys.info() if role.phys else None,
                         "emulated": {"name": spec["name"], "id": f"{spec['vid']:04x}:{spec['pid']:04x}",
                                      "buttons": spec["buttons"], "axes": dict(spec["axes"]),
-                                     "idle": sorted(role.mapper.idle), "active": role.uhid is not None}}
+                                     "held": dict(role.mapper.held), "active": role.uhid is not None}}
         lever = self.pad_mapper.lever
         xbox = {"name": XBOX_NAME, "id": f"{XBOX_ID[0]:04x}:{XBOX_ID[1]:04x}", "active": self.pad is not None,
                 "lever": {"from": f"{lever[0][0]}:{lever[0][1]}", "to": f"{lever[1][0]}:{lever[1][1]}"} if lever else None,
