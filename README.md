@@ -347,8 +347,10 @@ throttle), plus button numbers above 16.
   games see only the real one; restart a running game to pick up the change. The choice
   is remembered across restarts. Its buttons still feed the other virtual device if you
   cross-mapped them.
-- `sudo systemctl stop vkb-hotas` turns everything off; `start` turns it back on. Plugging
-  in any joystick also starts it.
+- `sudo systemctl stop vkb-hotas` turns everything off and gives the real sticks back to your
+  session (even after a crash); `start` turns it back on. Plugging in any joystick also starts
+  it. (Before October 2026 a stop could leave the sticks' event/js nodes blocked; replug them
+  once if a stopped service still hides them, and `./tools/vkb-check.py` flags it.)
 - Logs: `journalctl -u vkb-hotas -b`. A line "kernel event buffer overflowed" means some
   stick events were lost before the daemon read them; it re-reads the stick's state right
   away, so no button stays stuck. If a button ever seems held after you let go, check for it.

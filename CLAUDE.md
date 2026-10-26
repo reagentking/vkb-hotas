@@ -284,6 +284,16 @@ Keep every tool consistent with this.
   after an unplug, so a stale file must never survive: `--cleanup` (run at startup and as
   `ExecStopPost`, i.e. even after a crash) deletes it, plus the pre-roles flag
   `/run/vkb-hotas/active`, and retriggers input/hidraw.
+- **Un-hiding must also chmod back.** The retrigger re-adds the uaccess ACL entry but only resets
+  the mode where a rule sets one: on the user's machine hidraw came back 0660, while event/js
+  nodes stayed 0600 with `mask::---`, i.e. still blocked for Steam/SDL/evdev games after
+  `systemctl stop` (and after exposing), although the log said "restored". Found by checking the
+  nodes after a real stop. The `Hider` now records each node's mode before hiding
+  (`/run/vkb-hotas/hidden.json`, so `--cleanup` can restore after a crash) and chmods it back after
+  the retrigger; a recorded mode without group/other bits (left by the old bug) restores as 0660.
+  `vkb-check.py` reports real-stick nodes that are blocked while the service is stopped (and then
+  treats the virtual devices' absence as expected). Verified live: after `systemctl stop`, all six
+  nodes of both sticks were back to 0660 and openable by the user.
 - The installed `service/72-vkb-hotas.rules` is now static: it starts the service on any joystick
   `add` (`ENV{ID_INPUT_JOYSTICK}=="1"`; the daemon exits if no configured stick is there) and
   grants `uaccess` on both virtual devices' hidraw nodes.

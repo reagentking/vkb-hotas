@@ -675,16 +675,35 @@ class Hider:
     """Hides real sticks from user sessions with a runtime udev rule (dropping uaccess, mode 0600)
     for exactly their nodes, plus chmod 0600 now (which zeroes the already-applied ACL's mask).
     Living in /run/udev/rules.d, it follows live device switches without reinstalling, and
-    sorts between 70-uaccess and 73-seat-late like the installed rule."""
+    sorts between 70-uaccess and 73-seat-late like the installed rule.
+
+    Un-hiding needs more than dropping the rule: a udev "change" re-adds the uaccess ACL entry but
+    only resets the mode where some rule sets one (hidraw usually, event/js nodes not), so those
+    would stay 0600 with the ACL mask zeroed, i.e. still blocked. So each node's mode is recorded
+    before hiding (STATE, also read by --cleanup after a crash) and set back afterwards."""
     RULES = "/run/udev/rules.d/72-vkb-hotas-hide.rules"
+    STATE = "/run/vkb-hotas/hidden.json"
     OLD_FLAG = "/run/vkb-hotas/active"  # used by versions before roles
+    FALLBACK_MODE = 0o660               # input and hidraw nodes' usual mode
 
     def __init__(self):
         self.hidden = {}  # /dev node -> sysfs path
+        self.modes = {}   # /dev node -> mode to restore
+
+    @classmethod
+    def _usable(cls, mode):
+        """A recorded mode without group/other access is a node left blocked (e.g. by a version
+        without this fix), not a mode worth restoring."""
+        return mode if mode & 0o077 else cls.FALLBACK_MODE
 
     def apply(self, nodes):
         if nodes == self.hidden:
             return
+        for n in nodes.keys() - self.hidden.keys():  # record before the rule and chmod touch it
+            try:
+                self.modes[n] = self._usable(os.stat(n).st_mode & 0o7777)
+            except OSError:
+                pass
         changed = {**self.hidden, **nodes}
         if nodes:
             os.makedirs(os.path.dirname(self.RULES), exist_ok=True)
@@ -699,10 +718,7 @@ class Hider:
             os.replace(tmp, self.RULES)
         else:
             self._remove_rules()
-        subprocess.run(["udevadm", "control", "--reload"], check=False)
-        for s in changed.values():
-            subprocess.run(["udevadm", "trigger", "--action=change", s], check=False)
-        subprocess.run(["udevadm", "settle", "-t", "5"], check=False)
+        self._udev(changed.values())
         for n in nodes:
             try:
                 os.chmod(n, 0o600)  # with POSIX ACLs this zeroes the mask -> uaccess entry inert
@@ -710,9 +726,47 @@ class Hider:
                 log("could not hide", n, e)
         for n in sorted(nodes.keys() - self.hidden.keys()):
             log("hidden real node", n)
-        if self.hidden.keys() - nodes.keys():
-            log("restored permissions of", ", ".join(sorted(self.hidden.keys() - nodes.keys())))
+        restored = self._restore(self.hidden.keys() - nodes.keys())
+        if restored:
+            log("restored permissions of", ", ".join(restored))
         self.hidden = dict(nodes)
+        self._save()
+
+    @staticmethod
+    def _udev(syspaths):
+        subprocess.run(["udevadm", "control", "--reload"], check=False)
+        for sp in syspaths:
+            subprocess.run(["udevadm", "trigger", "--action=change", sp], check=False)
+        subprocess.run(["udevadm", "settle", "-t", "5"], check=False)
+
+    def _restore(self, gone):
+        """chmod un-hidden nodes back (after udev re-added the uaccess ACL entry; restoring the
+        group bits re-enables the ACL mask). Returns "node (mode)" for each node restored."""
+        out = []
+        for n in sorted(gone):
+            mode = self.modes.pop(n, self.FALLBACK_MODE)
+            try:
+                os.chmod(n, mode)
+                out.append(f"{n} ({mode:04o})")
+            except FileNotFoundError:
+                pass  # unplugged meanwhile
+            except OSError as e:
+                log("could not restore", n, e)
+        return out
+
+    def _save(self):
+        try:
+            if self.hidden:
+                os.makedirs(os.path.dirname(self.STATE), exist_ok=True)
+                tmp = self.STATE + ".tmp"
+                with open(tmp, "w") as f:
+                    json.dump({n: {"sys": sp, "mode": self.modes.get(n, self.FALLBACK_MODE)}
+                               for n, sp in self.hidden.items()}, f)
+                os.replace(tmp, self.STATE)
+            elif os.path.exists(self.STATE):
+                os.unlink(self.STATE)
+        except OSError as e:
+            log("could not save the hidden-node record:", e)
 
     def _remove_rules(self):
         for f in (self.RULES, self.OLD_FLAG):
@@ -723,14 +777,27 @@ class Hider:
 
     @classmethod
     def cleanup(cls):
-        """After a crash: drop the runtime rule and re-apply normal permissions everywhere."""
-        if not any(os.path.exists(f) for f in (cls.RULES, cls.OLD_FLAG)):
+        """After a crash: drop the runtime rule, re-apply udev permissions and restore the recorded
+        modes. Does nothing after a clean stop (no rule, no record)."""
+        try:
+            state = json.load(open(cls.STATE))
+        except (OSError, ValueError):
+            state = {}
+        if not state and not any(os.path.exists(f) for f in (cls.RULES, cls.OLD_FLAG)):
             return
-        cls()._remove_rules()
+        h = cls()
+        h._remove_rules()
         subprocess.run(["udevadm", "control", "--reload"], check=False)
         subprocess.run(["udevadm", "trigger", "--action=change",
                         "--subsystem-match=input", "--subsystem-match=hidraw"], check=False)
-        log("cleaned up the hiding rule")
+        subprocess.run(["udevadm", "settle", "-t", "5"], check=False)
+        h.modes = {n: v.get("mode", cls.FALLBACK_MODE) for n, v in state.items() if isinstance(v, dict)}
+        restored = h._restore(list(h.modes))
+        try:
+            os.unlink(cls.STATE)
+        except FileNotFoundError:
+            pass
+        log("cleaned up the hiding rule" + (": restored " + ", ".join(restored) if restored else ""))
 
 
 class Role:

@@ -123,7 +123,11 @@ def host_checks(stick_override):
                      "  feeds the virtual Xbox controller (vkb-mapper --hide " + r + " to undo)" if mode == "xbox" else ""))
             for n in nodes(h):
                 vis = can_open(n)
-                if exposed:
+                if st != "active":  # service stopped: the real stick must be usable again
+                    print(f"  [{OK if vis else BAD}] real    {n:20} " + ("openable (service stopped)" if vis else
+                          "STILL BLOCKED although the service is stopped: replug the stick (a vkb-hotas before "
+                          "the permission-restore fix left event/js nodes at mode 0600)"))
+                elif exposed:
                     print(f"  [{OK if vis else WARN}] real    {n:20} {'openable: games see the real stick (exposed)' if vis else 'not openable by you'}")
                 else:
                     hidden_any = True
@@ -131,7 +135,10 @@ def host_checks(stick_override):
         emu_id = EMULATED_IDS[r]
         virt = hid_devices(*emu_id)
         name = f"virtual {EMULATED_NAMES[r]} {emu_id[0]:04x}:{emu_id[1]:04x}"
-        if mode != "virtual":
+        if st != "active":
+            print(f"  [{OK if not virt else WARN}] {name} {'removed (service stopped)' if not virt else 'present although the service is stopped'}")
+            virt = []
+        elif mode != "virtual":
             why = "exposed" if exposed else "in Xbox mode"
             print(f"  [{OK if not virt else WARN}] {name} {'removed while ' + why if not virt else 'present although ' + why}")
         elif not virt:
