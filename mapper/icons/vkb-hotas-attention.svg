@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- vkb-hotas (attention): the flight stick with a warning badge (grip with hat, red button and trigger on a gimbal base) -->
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#3a5068"/><stop offset="1" stop-color="#18242f"/></linearGradient>
+    <linearGradient id="b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#2a3b4c"/><stop offset="1" stop-color="#121b24"/></linearGradient>
+  </defs>
+  <!-- base -->
+  <path d="M8 58 L56 58 L51 46 Q50 43 46 43 L18 43 Q14 43 13 46 Z" fill="url(#b)" stroke="#9fc4dc" stroke-width="2" stroke-linejoin="round"/>
+  <ellipse cx="32" cy="43.5" rx="9" ry="3" fill="#0d151d" stroke="#9fc4dc" stroke-width="1.6"/>
+  <circle cx="19" cy="51.5" r="2.2" fill="#46e5ff"/>
+  <!-- shaft -->
+  <rect x="29" y="31" width="6" height="13" rx="1.5" fill="#5b7590" stroke="#9fc4dc" stroke-width="1.2"/>
+  <!-- grip -->
+  <path d="M23 34 Q21 22 22 14 Q23 5 33 4.5 Q43 5 44 13 Q45 20 40 25 L39 34 Z" fill="url(#g)" stroke="#9fc4dc" stroke-width="2" stroke-linejoin="round"/>
+  <!-- trigger -->
+  <path d="M23.5 21 Q17 22 17.5 27 Q19 28.5 23.5 26.5" fill="#ffb547" stroke="#1a1206" stroke-width="0.8"/>
+  <!-- hat and red button -->
+  <circle cx="30" cy="11" r="3.4" fill="#46e5ff" stroke="#0d151d" stroke-width="1"/>
+  <circle cx="39.5" cy="16" r="2.4" fill="#ff4d5e" stroke="#0d151d" stroke-width="0.8"/>
+  <!-- attention: a real stick is given to games -->
+  <circle cx="51" cy="51" r="11" fill="#ffb547" stroke="#1a1206" stroke-width="1.5"/>
+  <rect x="49.3" y="43.5" width="3.4" height="9.5" rx="1.5" fill="#1a1206"/>
+  <circle cx="51" cy="57" r="1.9" fill="#1a1206"/>
+</svg>

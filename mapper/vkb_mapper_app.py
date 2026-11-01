@@ -18,6 +18,17 @@ APP_ID = "io.github.reagentking.VkbHotasMapper"
 TITLE = "HOTAS Mapper"
 
 
+def on_signal(GLib, sig, cb):
+    """GLibUnix.signal_add where PyGObject has it (GLib.unix_signal_add is deprecated there)."""
+    try:
+        import gi
+        gi.require_version("GLibUnix", "2.0")
+        from gi.repository import GLibUnix
+        return GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, sig, cb)
+    except (ImportError, ValueError, AttributeError):
+        return GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig, cb)
+
+
 def load():
     """The GTK/WebKit modules, or None (with the reason) when they can't be used here."""
     if not (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY")):
@@ -99,7 +110,7 @@ def run(mods, *, app_id, existing_url, start_server, state_file, log):
             st["win"].present()
             return
         win = st["win"] = Gtk.ApplicationWindow(application=app, title=TITLE)
-        win.set_icon_name("input-gaming")
+        win.set_icon_name("vkb-hotas")  # installed into the hicolor icon theme
         win.set_default_size(*size())
         view = WebKit.WebView()
         view.get_settings().set_enable_developer_extras(False)
@@ -114,8 +125,8 @@ def run(mods, *, app_id, existing_url, start_server, state_file, log):
     app.connect("startup", on_startup)
     app.connect("activate", on_activate)
     app.connect("shutdown", on_shutdown)
-    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, lambda: app.quit() or False)
-    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, lambda: app.quit() or False)
+    on_signal(GLib, signal.SIGTERM, lambda: app.quit() or False)
+    on_signal(GLib, signal.SIGINT, lambda: app.quit() or False)
     try:
         app.register(None)  # runs on_startup if this is the first instance
         remote = app.get_is_remote()

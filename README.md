@@ -54,6 +54,10 @@ Reports from other sticks and games are welcome.
 - Optional, for HOTAS Mapper's own window: WebKitGTK 6.0 and PyGObject (Arch `webkitgtk-6.0`
   `python-gobject`, Debian/Ubuntu `gir1.2-webkit-6.0` `python3-gi`, Fedora `webkitgtk6.0`
   `python3-gobject`). Without them it opens in your web browser instead.
+- Optional, for the tray icon: PyGObject with GTK 3 and libayatana-appindicator (Arch
+  `libayatana-appindicator`, Debian/Ubuntu `gir1.2-ayatanaappindicator3-0.1`, Fedora
+  `libayatana-appindicator-gtk3`). KDE Plasma shows it out of the box; GNOME needs the
+  AppIndicator extension.
 
 ## Install
 
@@ -339,8 +343,16 @@ throttle), plus button numbers above 16.
 - The service starts whenever a joystick is plugged in, including at boot, and quits
   again if none of your configured sticks is there. Sticks unplugged while it runs are
   picked up again when plugged back in; the virtual device stays put meanwhile.
+- **Tray icon (HOTAS Tray):** a flight stick icon in the system tray, started at login. Click it for
+  a menu with each stick's **Virtual T.16000M/TWCS / Xbox pad / Real stick** (the current one
+  ticked) and **Open HOTAS Mapper**. Its tooltip says what games see, and it gets an amber
+  warning badge while a stick is given to games as the real one, so you notice. No root, no
+  terminal; it follows changes made in HOTAS Mapper or with `vkb-mapper`. Start it from the
+  menu as **HOTAS Tray** (or `vkb-tray`); turn off the login start in your desktop's
+  Autostart settings (that survives reinstalls).
 - **Give games the real stick** (for VKBDevCfg, or games that support it natively)
-  without stopping the service: flip **Games see** to **Real stick** in HOTAS Mapper, or
+  without stopping the service: pick **Real stick** in the tray menu, flip **Games see** to
+  **Real stick** in HOTAS Mapper, or
 
   ```bash
   vkb-mapper --expose stick         # or throttle, or all
@@ -398,7 +410,7 @@ throttle stick ┘     ▲              ▲      │    ├─▶ virtual TWCS T
 |---|---|
 | `install.sh`, `uninstall.sh` | system install/removal (everything is installed flat into `/usr/local/lib/vkb-hotas`) |
 | `service/` | the root daemon `vkb-hotas.py`, its systemd unit, config template `vkb-hotas.default` and udev rule `72-vkb-hotas.rules` |
-| `mapper/` | HOTAS Mapper: server `vkb-mapper.py`, page `vkb-mapper.html` (standard library only, no build), its window `vkb_mapper_app.py` (GTK4 + WebKitGTK, optional), game default references `game-defaults.json` and menu entry `vkb-mapper.desktop` |
+| `mapper/` | HOTAS Mapper: server `vkb-mapper.py`, page `vkb-mapper.html` (standard library only, no build), its window `vkb_mapper_app.py` (GTK4 + WebKitGTK, optional), the tray icon `vkb-tray.py` (+ `vkb-tray.desktop`), the app icons `icons/`, game default references `game-defaults.json` and menu entry `vkb-mapper.desktop` |
 | `common/` | `vkb_common.py`: config, roles, device selection, the mapping format and terminal pickers shared by everything |
 | `tools/` | helpers you run as your user: `proton-setup.py` (per-game prefix setup), `vkb-check.py` (setup and Proton-log diagnostics), `vkb-learn.py` (axis discovery) |
 | `dev/` | `fake-daemon.py`: the daemon's real event loop with simulated left and right Omni Throttles (and a stand-in Xbox pad), for working on the GUI without root |

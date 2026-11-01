@@ -109,6 +109,17 @@ example, press a button and check `out.b` has the mapped bit set, or send
   own pid (not a `timeout` wrapper) exits 0 and removes `$XDG_RUNTIME_DIR/vkb-mapper/url-<key>`;
   `env -u WAYLAND_DISPLAY -u DISPLAY …` falls back to the browser. Export/Photo/Import dialogs need a
   person to click.
+- **Tray** (puts an icon in the user's tray; outside the Bash sandbox, against the fake daemon):
+  `VKB_HOTAS_CTL=$DIR/ctl.sock mapper/vkb-tray.py &`, then find `…/NotificationItem/vkb_hotas_tray`
+  in `gdbus call --session --dest org.kde.StatusNotifierWatcher --object-path /StatusNotifierWatcher
+  --method org.freedesktop.DBus.Properties.Get org.kde.StatusNotifierWatcher RegisteredStatusNotifierItems`.
+  Read its menu with `com.canonical.dbusmenu.GetLayout (0, -1, [])` on `<item>/Menu` (radio items
+  carry `toggle-state`), click with `com.canonical.dbusmenu.Event <id> clicked '<0>' 0`. Check: the
+  ticked modes match the daemon; clicking "Real stick" writes `VKB_HOTAS_EXPOSE` to `DIR/config`
+  and the item's `Status` becomes `NeedsAttention`; a `vkb-mapper --xbox throttle` from the CLI
+  shows up in the menu; stopping the fake daemon disables the items and says so; a second copy
+  prints "already running"; `--autostart` with a socket you can't open exits 0; a `quiet` client
+  gets no `state` lines after its first.
 - **Looks in the window:** WebKitGTK renders some controls differently from the browser pane (it
   once drew every dropdown white). After visual changes, load the test URL in a small GTK4 +
   WebKit 6.0 window and save `view.get_snapshot(WebKit.SnapshotRegion.VISIBLE, …)` as a PNG

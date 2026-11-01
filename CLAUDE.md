@@ -40,7 +40,7 @@ sticks, triggers and D-pad correctly (after a reboot; see the uinput gotcha).
 | Path | Contents |
 |---|---|
 | `service/` | root daemon `vkb-hotas.py`, systemd unit, config template, udev rule |
-| `mapper/` | HOTAS Mapper server `vkb-mapper.py`, page `vkb-mapper.html`, window `vkb_mapper_app.py`, `.desktop` entry |
+| `mapper/` | HOTAS Mapper server `vkb-mapper.py`, page `vkb-mapper.html`, window `vkb_mapper_app.py`, tray `vkb-tray.py`, `.desktop` entries |
 | `common/` | `vkb_common.py`, shared by service, mapper and tools |
 | `tools/` | user-run helpers: `proton-setup.py`, `vkb-check.py`, `vkb-learn.py` |
 | `dev/` | `fake-daemon.py` (GUI testing without root) |
@@ -190,7 +190,8 @@ virtual device is destroyed and re-created when its `button_count` changes the H
   connected sticks share a VID:PID; `selector_for()` adds the port only then. A vague legacy
   selector (`""` = any VKB, vendor only) never takes a stick another role names exactly.
 - **Commands** (control socket): `hello`; `pulse {role, button}` (`role: "xbox"` takes a button
-  name); `mode {role|"all", mode}`; `select {role, device|null}`
+  name); `mode {role|"all", mode}`; `quiet` (this client gets no live `state` lines, only
+  hello/result/mapping: the tray; `ControlServer.watchers()`); `select {role, device|null}`
   (validated against connected sticks; picking the other role's stick swaps them; the stick role
   can't be none); `expose {role|"all", on}`. `select`/`expose` reply `{"t":"result","ok","error"}`
   to the caller only, *after* broadcasting the new `hello`, and persist to `/etc/default/vkb-hotas`
@@ -332,6 +333,29 @@ guards, and keeps them:
   sets the mode *before* selecting so no TWCS appears in between. The Devices dialog's Xbox
   section (`padDevices`) offers the same choices as checkboxes, through the same functions.
 - The server exits 45 s after its last SSE client disconnects (browser mode).
+- **Tray (`vkb-tray.py`, "HOTAS Tray"):** asked for because the user kept stopping the service to
+  get the real stick back. An AyatanaAppIndicator3 (GTK 3, libayatana-appindicator) icon whose
+  menu has, per configured role, radio items virtual / Xbox pad / real (the user chose all three
+  modes, menu on click, autostart at login). It keeps one control connection (sends `quiet`, so
+  the daemon doesn't stream state to it), sends `mode` commands, follows `hello` broadcasts, shows
+  the service-down state and reconnects every 2 s. Status `NeedsAttention` (dialog-warning icon)
+  while any role is real; the title (tooltip) says what games see. A separate process because the
+  window is GTK 4 and one process can't load both; single instance via an flock in
+  `$XDG_RUNTIME_DIR`. Installed to `/usr/local/bin/vkb-tray`, a menu entry, and
+  `/etc/xdg/autostart/vkb-tray.desktop` with `--autostart` (exits quietly when the socket belongs
+  to another user or the bindings are missing; a user disabling it in Autostart settings gets a
+  per-user override that survives reinstalls). Test it without a mouse over D-Bus: find it in
+  `org.kde.StatusNotifierWatcher.RegisteredStatusNotifierItems`, read the menu with
+  `com.canonical.dbusmenu.GetLayout`, click with `Event(id, "clicked", …)` (test-mapper-ui).
+  libayatana prints a deprecation warning at start: its successor, libayatana-appindicator-glib
+  (GMenuModel menus, no GTK), isn't in Arch/CachyOS repos (AUR only), so it stays on the GTK 3 one.
+- **Icons:** `mapper/icons/vkb-hotas.svg` (a flight stick; the user found the generic
+  `input-gaming` gamepad misleading) and `vkb-hotas-attention.svg` (with an amber "!" badge: the
+  tray's attention icon while a stick is real). Installed into
+  `/usr/local/share/icons/hicolor/scalable/apps` and used by both `.desktop` entries, the window
+  and the tray (from the repo the tray sets `IconThemePath` to `mapper/icons`). No icon cache is
+  created there (only an existing one is refreshed): a new cache would hide icons other programs
+  add later, and was left behind by uninstall. Drawn on a 64 grid with bold shapes for 22 px.
 - **Own window (default):** `vkb_mapper_app.py` shows the same page in a GTK4 + WebKitGTK 6.0
   window (PyGObject, optional; `load()` falls back to the browser without them or without a
   display; `--browser` forces it, `--no-browser` only prints the URL). The user wanted it to "feel

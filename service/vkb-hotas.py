@@ -523,6 +523,11 @@ class ControlServer:
             os.chown(self.PATH, uid, -1)
         self.sock.listen(4)
         self.clients = {}  # fd -> [socket, inbuf, outbuf]
+        self.quiet = set()  # clients that only want hello/result/mapping lines, no live state (the tray)
+
+    def watchers(self):
+        """Clients that want the live state stream."""
+        return [f for f in self.clients if f not in self.quiet]
 
     def fds(self):
         return [self.sock.fileno(), *self.clients]
@@ -537,13 +542,14 @@ class ControlServer:
         return conn.fileno()
 
     def drop(self, fd):
+        self.quiet.discard(fd)
         c = self.clients.pop(fd, None)
         if c:
             c[0].close()
 
-    def send(self, msg, fd=None):
+    def send(self, msg, fd=None, to=None):
         line = (json.dumps(msg, separators=(",", ":")) + "\n").encode()
-        for f in ([fd] if fd is not None else list(self.clients)):
+        for f in ([fd] if fd is not None else list(self.clients if to is None else to)):
             c = self.clients.get(f)
             if not c:
                 continue
@@ -1112,6 +1118,9 @@ class Daemon:
         if c == "hello":
             self.ctl.send(self.hello(), fd)
             return
+        if c == "quiet":  # stop streaming live state to this client (the tray needs only hello)
+            self.ctl.quiet.add(fd)
+            return
         if c == "pulse" and cmd.get("role") == "xbox":
             self.pad_mapper.pulse(cmd.get("button"), time.monotonic())
             return
@@ -1220,7 +1229,7 @@ class Daemon:
                     self.tick(now)
 
                 timeout = 200
-                if self.dirty and self.ctl.clients:
+                if self.dirty and self.ctl.watchers():
                     timeout = max(0, int(33 - (now - last_sent) * 1000))
                 if self.pad_mapper.pulses or any(role.mapper.pulses for role in self.roles.values()):
                     timeout = min(timeout, 30)
@@ -1287,10 +1296,11 @@ class Daemon:
                         self.pad.send(out)
                         self.pad_last = out
                         self.dirty = True
-                if self.dirty and self.ctl.clients and now - last_sent >= 0.033:
-                    self.ctl.send(self.state_msg(now))
+                watchers = self.ctl.watchers()
+                if self.dirty and watchers and now - last_sent >= 0.033:
+                    self.ctl.send(self.state_msg(now), to=watchers)
                     last_sent, self.dirty = now, False
-                elif not self.ctl.clients:
+                elif not watchers:
                     self.dirty = False
         finally:
             self.shutdown()

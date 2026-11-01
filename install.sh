@@ -151,8 +151,18 @@ install -Dm755 "$here/mapper/vkb-mapper.py"   "$lib/vkb-mapper.py"
 install -Dm644 "$here/mapper/vkb-mapper.html" "$lib/vkb-mapper.html"
 install -Dm644 "$here/mapper/game-defaults.json" "$lib/game-defaults.json"
 install -Dm644 "$here/mapper/vkb_mapper_app.py" "$lib/vkb_mapper_app.py"
+install -Dm755 "$here/mapper/vkb-tray.py" "$lib/vkb-tray.py"
 ln -sf "$lib/vkb-mapper.py" /usr/local/bin/vkb-mapper
+ln -sf "$lib/vkb-tray.py" /usr/local/bin/vkb-tray
 install -Dm644 "$here/mapper/vkb-mapper.desktop" /usr/local/share/applications/vkb-mapper.desktop
+install -Dm644 "$here/mapper/vkb-tray.desktop" /usr/local/share/applications/vkb-tray.desktop
+icons=/usr/local/share/icons/hicolor/scalable/apps
+install -Dm644 "$here/mapper/icons/vkb-hotas.svg" "$icons/vkb-hotas.svg"
+install -Dm644 "$here/mapper/icons/vkb-hotas-attention.svg" "$icons/vkb-hotas-attention.svg"
+# refresh an existing icon cache only: creating one would hide icons other programs add here later
+[[ -e /usr/local/share/icons/hicolor/icon-theme.cache ]] && gtk-update-icon-cache -q -t -f /usr/local/share/icons/hicolor 2>/dev/null || true
+# tray icon at login; turning it off in the desktop's autostart settings is stored per user and survives reinstalls
+sed 's/^Exec=vkb-tray$/Exec=vkb-tray --autostart/' "$here/mapper/vkb-tray.desktop" | install -Dm644 /dev/stdin /etc/xdg/autostart/vkb-tray.desktop
 install -Dm644 "$here/service/72-vkb-hotas.rules" "$rules"
 install -Dm644 "$here/service/vkb-hotas.service" /etc/systemd/system/vkb-hotas.service
 
