@@ -6,5 +6,6 @@ Comment=Remap your flight stick's buttons and axes for vkb-hotas
 Exec=vkb-mapper
 Icon=input-gaming
 Terminal=false
+StartupWMClass=io.github.reagentking.VkbHotasMapper
 Categories=Settings;HardwareSettings;
 Keywords=joystick;hotas;vkb;remap;flight stick;

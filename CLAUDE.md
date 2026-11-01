@@ -40,7 +40,7 @@ sticks, triggers and D-pad correctly (after a reboot; see the uinput gotcha).
 | Path | Contents |
 |---|---|
 | `service/` | root daemon `vkb-hotas.py`, systemd unit, config template, udev rule |
-| `mapper/` | HOTAS Mapper server `vkb-mapper.py`, page `vkb-mapper.html`, `.desktop` entry |
+| `mapper/` | HOTAS Mapper server `vkb-mapper.py`, page `vkb-mapper.html`, window `vkb_mapper_app.py`, `.desktop` entry |
 | `common/` | `vkb_common.py`, shared by service, mapper and tools |
 | `tools/` | user-run helpers: `proton-setup.py`, `vkb-check.py`, `vkb-learn.py` |
 | `dev/` | `fake-daemon.py` (GUI testing without root) |
@@ -331,7 +331,20 @@ guards, and keeps them:
   T.16000M's stick) or back; an unused stick becomes the throttle role via `pickNewPadStick`, which
   sets the mode *before* selecting so no TWCS appears in between. The Devices dialog's Xbox
   section (`padDevices`) offers the same choices as checkboxes, through the same functions.
-- The server exits 45 s after its last SSE client disconnects.
+- The server exits 45 s after its last SSE client disconnects (browser mode).
+- **Own window (default):** `vkb_mapper_app.py` shows the same page in a GTK4 + WebKitGTK 6.0
+  window (PyGObject, optional; `load()` falls back to the browser without them or without a
+  display; `--browser` forces it, `--no-browser` only prints the URL). The user wanted it to "feel
+  like a real app"; a native-widget rewrite was considered and rejected (two UIs to maintain,
+  PySide6 dependency). It's a `Gtk.Application` (`APP_ID`, plus `.m<instance_key>` for test
+  instances so they never merge with the real one): the server starts in `startup` (first
+  instance only) and stops in `shutdown`, so closing the window ends it at once; a second launch
+  just activates the first (raises the window). If a browser-mode server already runs for the same
+  mapping file, the window shows it instead. `decide-policy` sends other sites to the browser;
+  downloads (Export) ask for a path via `Gtk.FileDialog` in `decide-destination`; `<input
+  type=file>` gets WebKit's own GTK dialog. Window size goes to `window.json` next to the mapping
+  file. The `.desktop` entry's `StartupWMClass` matches `APP_ID` so KDE/GNOME group the window
+  under it. `start_server()` is shared by both modes.
 - **Single-instance file:** `$XDG_RUNTIME_DIR/vkb-mapper/url-<hash of mapping path + socket>`. It's
   keyed so test instances never hand over to the user's real mapper. A test instance once did
   exactly that before the key existed.
@@ -492,6 +505,12 @@ never written into Steam's `localconfig.vdf`.
 
 ## Gotchas (all hit during development)
 
+- **WebKitGTK draws form controls with the desktop's GTK theme.** In HOTAS Mapper's own window on
+  the user's light GTK theme, every `<select>` was a white box under the page's light text
+  (unreadable until opened); browsers had shown them dark. Fix: `color-scheme: dark` on `:root`
+  plus `select{appearance:none}` with our own colours and an inline-SVG arrow (CSP allows `data:`
+  images). Check page changes in the real window too: render it with WebKitGTK and snapshot it
+  (`WebView.get_snapshot` → `Gdk.Texture.save_to_png`, see the test-mapper-ui skill).
 - **uinput not loaded (ENODEV):** `/dev/uinput` here carries an ACL for the user (Steam's udev
   rules), but while the module isn't loaded an open gives ENODEV. The real cause on the user's
   machine: the kernel package had been updated (running 7.2.8, installed 7.2.9), so

@@ -6,6 +6,7 @@
 <title>HOTAS Mapper</title>
 <style>
 :root{
+  color-scheme:dark;  /* built-in controls (sliders, scrollbars, popups) render dark, also in WebKitGTK */
   --bg:#06090d; --panel:#0b1118; --panel2:#0f1720; --line:#1b2632; --line2:#26364a;
   --text:#d3e5f2; --muted:#6f879b; --dim:#3c4f61;
   --amber:#ffb547; --amber-d:rgba(255,181,71,.14); --cyan:#46e5ff; --cyan-d:rgba(70,229,255,.13);
@@ -103,6 +104,13 @@ code.nw{white-space:nowrap}
 .bar label{font:600 11px var(--mono);letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
 select,.input{background:var(--panel2);border:1px solid var(--line2);border-radius:4px;padding:6px 9px}
 select:hover,.input:hover{border-color:var(--dim)}
+/* WebKitGTK (HOTAS Mapper's own window) draws <select> with the desktop's GTK theme: on a light
+   theme that's white boxes under our light text. Draw them ourselves, arrow included. */
+select{appearance:none;-webkit-appearance:none;background-color:var(--panel2);color:var(--text);padding-right:28px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0h10L5 6z' fill='%236f879b'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center}
+select:disabled{opacity:.55}
+option,optgroup{background-color:var(--panel2);color:var(--text)}
 .btn{background:var(--panel2);border:1px solid var(--line2);border-radius:4px;padding:6px 11px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text)}
 .btn:hover{border-color:var(--cyan);color:var(--cyan)}
 .btn.danger:hover{border-color:var(--red);color:var(--red)}

@@ -2,14 +2,15 @@
 """
 vkb-mapper: graphical button/axis remapper for vkb-hotas.
 
-Opens a local web UI in your browser. It shows your sticks' live input, and
+Opens in its own window (GTK4 + WebKitGTK 6.0, if installed; otherwise in your browser). It
+shows your sticks' live input, and
 lets you choose which physical button drives each button / hat direction of the
 emulated T.16000M (and TWCS Throttle, with a second stick), plus axis sources,
 inversion and deadzones, and which real stick feeds each one. Changes are saved
 to ~/.config/vkb-hotas/mapping.json and applied by the running daemon within
 half a second, even while a game is running.
 
-  vkb-mapper.py [--port N] [--no-browser]
+  vkb-mapper.py [--port N] [--browser | --no-browser]
   vkb-mapper.py --expose stick|throttle|all   give the real stick(s) to games as they are
   vkb-mapper.py --xbox stick|throttle|all     make them feed a virtual Xbox 360 controller instead
   vkb-mapper.py --hide stick|throttle|all     back to the virtual Thrustmaster devices
@@ -782,11 +783,34 @@ def cli_mode(role, mode):
     print("Restart a running game to pick up the change.")
 
 
+def instance_key():
+    return hashlib.sha256(f"{State.path}\0{CTL}".encode()).hexdigest()[:12]
+
+
 def url_file():
     """Single-instance file, keyed by mapping file + daemon socket so test instances
     (--mapping / VKB_HOTAS_CTL) never hand over to the real one."""
-    key = hashlib.sha256(f"{State.path}\0{CTL}".encode()).hexdigest()[:12]
-    return os.path.join(STATE_DIR, f"url-{key}")
+    return os.path.join(STATE_DIR, f"url-{instance_key()}")
+
+
+def start_server(port):
+    """Bind the server and publish its URL in the single-instance file. Returns (server, url,
+    cleanup), cleanup removing that file."""
+    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    srv.daemon_threads = True
+    url = f"http://127.0.0.1:{srv.server_address[1]}/?t={State.token}"
+    os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
+    fd = os.open(url_file(), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.write(fd, url.encode())
+    os.close(fd)
+    print(f"vkb-mapper: {url}\n(mapping file: {State.path})", flush=True)
+
+    def cleanup():
+        try:
+            os.unlink(url_file())
+        except OSError:
+            pass
+    return srv, url, cleanup
 
 
 def existing_instance():
@@ -809,7 +833,8 @@ def existing_instance():
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=0, help="port on 127.0.0.1 (default: random)")
-    ap.add_argument("--no-browser", action="store_true", help="just print the URL")
+    ap.add_argument("--no-browser", action="store_true", help="just print the URL (no window, no browser)")
+    ap.add_argument("--browser", action="store_true", help="open in the web browser instead of HOTAS Mapper's own window")
     ap.add_argument("--mapping", help="mapping file to edit (default: ~/.config/vkb-hotas/mapping.json, "
                                       "which is what the daemon reads)")
     g = ap.add_mutually_exclusive_group()
@@ -838,6 +863,18 @@ def main():
     if args.mapping:
         State.path = os.path.abspath(args.mapping)
 
+    if not args.no_browser and not args.browser:  # HOTAS Mapper's own window, if WebKitGTK is there
+        import vkb_mapper_app as gui
+        mods, why = gui.load()
+        if mods:
+            default = State.path == mapping_path() and CTL == "/run/vkb-hotas/ctl.sock"
+            os.makedirs(os.path.dirname(State.path), exist_ok=True)
+            return gui.run(mods, app_id=gui.APP_ID if default else f"{gui.APP_ID}.m{instance_key()}",
+                           existing_url=existing_instance(), start_server=lambda: start_server(args.port),
+                           state_file=os.path.join(os.path.dirname(State.path), "window.json"),
+                           log=lambda m: print("vkb-mapper:", m, flush=True))
+        print(f"vkb-mapper: opening in the browser ({why})", flush=True)
+
     url = existing_instance()
     if url:
         print(f"vkb-mapper already running: {url}")
@@ -845,14 +882,8 @@ def main():
             webbrowser.open(url)
         return
 
-    srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    srv.daemon_threads = True
-    url = f"http://127.0.0.1:{srv.server_address[1]}/?t={State.token}"
-    os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
-    fd = os.open(url_file(), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    os.write(fd, url.encode())
-    os.close(fd)
-    print(f"vkb-mapper: {url}\n(mapping file: {State.path}; Ctrl+C to quit)", flush=True)
+    srv, url, cleanup = start_server(args.port)
+    print("(Ctrl+C to quit)", flush=True)
     if not args.no_browser:
         threading.Timer(0.3, webbrowser.open, (url,)).start()
 
@@ -876,10 +907,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        try:
-            os.unlink(url_file())
-        except OSError:
-            pass
+        cleanup()
 
 
 if __name__ == "__main__":

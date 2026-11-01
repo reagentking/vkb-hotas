@@ -51,6 +51,9 @@ Reports from other sticks and games are welcome.
   (Arch `python-evdev`, Debian/Ubuntu `python3-evdev`, Fedora `python3-evdev`)
 - Steam with Proton. Native Steam, Flatpak and Snap Steam installs are all
   detected by `proton-setup.py`.
+- Optional, for HOTAS Mapper's own window: WebKitGTK 6.0 and PyGObject (Arch `webkitgtk-6.0`
+  `python-gobject`, Debian/Ubuntu `gir1.2-webkit-6.0` `python3-gi`, Fedora `webkitgtk6.0`
+  `python3-gobject`). Without them it opens in your web browser instead.
 
 ## Install
 
@@ -120,7 +123,10 @@ remapping happens before the game sees anything. Run:
 vkb-mapper          # or "HOTAS Mapper" in your application menu
 ```
 
-A local page opens in your browser. The tabs at the top switch between the
+HOTAS Mapper opens in its own window (or, without WebKitGTK, as a local page in your browser;
+`vkb-mapper --browser` picks the browser anyway). Launching it again brings the open window to
+the front, and closing the window stops it. Export asks where to save, Photo… and Import open a
+file dialog, and links to other sites open in your browser. The tabs at the top switch between the
 **Stick** (real stick → T.16000M), the **Throttle** (second real stick → TWCS
 Throttle) and the **Xbox** controller (see [Xbox controller mode](#xbox-controller-mode));
 each tab has its own panels:
@@ -392,7 +398,7 @@ throttle stick ┘     ▲              ▲      │    ├─▶ virtual TWCS T
 |---|---|
 | `install.sh`, `uninstall.sh` | system install/removal (everything is installed flat into `/usr/local/lib/vkb-hotas`) |
 | `service/` | the root daemon `vkb-hotas.py`, its systemd unit, config template `vkb-hotas.default` and udev rule `72-vkb-hotas.rules` |
-| `mapper/` | HOTAS Mapper: server `vkb-mapper.py`, page `vkb-mapper.html` (standard library only, no build), game default references `game-defaults.json` and menu entry `vkb-mapper.desktop` |
+| `mapper/` | HOTAS Mapper: server `vkb-mapper.py`, page `vkb-mapper.html` (standard library only, no build), its window `vkb_mapper_app.py` (GTK4 + WebKitGTK, optional), game default references `game-defaults.json` and menu entry `vkb-mapper.desktop` |
 | `common/` | `vkb_common.py`: config, roles, device selection, the mapping format and terminal pickers shared by everything |
 | `tools/` | helpers you run as your user: `proton-setup.py` (per-game prefix setup), `vkb-check.py` (setup and Proton-log diagnostics), `vkb-learn.py` (axis discovery) |
 | `dev/` | `fake-daemon.py`: the daemon's real event loop with simulated left and right Omni Throttles (and a stand-in Xbox pad), for working on the GUI without root |

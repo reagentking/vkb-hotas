@@ -150,6 +150,7 @@ install -Dm644 "$here/README.md"     "$lib/README.md"
 install -Dm755 "$here/mapper/vkb-mapper.py"   "$lib/vkb-mapper.py"
 install -Dm644 "$here/mapper/vkb-mapper.html" "$lib/vkb-mapper.html"
 install -Dm644 "$here/mapper/game-defaults.json" "$lib/game-defaults.json"
+install -Dm644 "$here/mapper/vkb_mapper_app.py" "$lib/vkb_mapper_app.py"
 ln -sf "$lib/vkb-mapper.py" /usr/local/bin/vkb-mapper
 install -Dm644 "$here/mapper/vkb-mapper.desktop" /usr/local/share/applications/vkb-mapper.desktop
 install -Dm644 "$here/service/72-vkb-hotas.rules" "$rules"

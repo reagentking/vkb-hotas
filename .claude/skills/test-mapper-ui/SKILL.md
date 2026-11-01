@@ -102,6 +102,17 @@ example, press a button and check `out.b` has the mapped bit set, or send
   again. With `--throttle 231d:3201` and both sticks
   set to Xbox, the Xbox tab's LT/RT rows say "NOW FROM THR Z" (not with only the stick in Xbox);
   `hello.xbox.lever` is `{from: "stick:ABS_Z", to: "throttle:ABS_Z"}`.
+- **Own window** (opens a real window on the user's desktop; run outside the Bash sandbox, against
+  the fake daemon): `VKB_HOTAS_CTL=$DIR/ctl.sock mapper/vkb-mapper.py --mapping $SCRATCH/mapping.json &`
+  logs "window: page loaded"; a second identical launch logs "already open … brought its window to
+  the front" and exits 0; `--no-browser` meanwhile reuses the window's URL; SIGTERM to the app's
+  own pid (not a `timeout` wrapper) exits 0 and removes `$XDG_RUNTIME_DIR/vkb-mapper/url-<key>`;
+  `env -u WAYLAND_DISPLAY -u DISPLAY …` falls back to the browser. Export/Photo/Import dialogs need a
+  person to click.
+- **Looks in the window:** WebKitGTK renders some controls differently from the browser pane (it
+  once drew every dropdown white). After visual changes, load the test URL in a small GTK4 +
+  WebKit 6.0 window and save `view.get_snapshot(WebKit.SnapshotRegion.VISIBLE, …)` as a PNG
+  (`get_snapshot_finish(res).save_to_png(path)`), then look at it.
 - **Two-stage triggers:** + Two-stage trigger adds a row (saved as the section's `stages` in
   `DIR/mapping.json`); a duplicate stage 1 or equal buttons shows a warning and the save fails
   cleanly; Remove and the Delay box persist across reload. Behaviour: open the socket, read
