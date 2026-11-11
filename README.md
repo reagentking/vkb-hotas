@@ -354,9 +354,10 @@ throttle), plus button numbers above 16.
   a menu with each stick's **Virtual T.16000M/TWCS / Xbox pad / Real stick** (the current one
   ticked) and **Open HOTAS Mapper**. Its tooltip says what games see, and it gets an amber
   warning badge while a stick is given to games as the real one, so you notice. No root, no
-  terminal; it follows changes made in HOTAS Mapper or with `vkb-mapper`. Start it from the
-  menu as **HOTAS Tray** (or `vkb-tray`); turn off the login start in your desktop's
-  Autostart settings (that survives reinstalls).
+  terminal; it follows changes made in HOTAS Mapper or with `vkb-mapper`. It's part of HOTAS
+  Mapper rather than a separate app: after **Quit tray icon**, right-click HOTAS Mapper in the
+  application menu and pick **Show tray icon** (or run `vkb-mapper --tray`). Turn off the
+  login start in your desktop's Autostart settings ("HOTAS Tray"; that survives reinstalls).
 - **Give games the real stick** (for VKBDevCfg, or games that support it natively)
   without stopping the service: pick **Real stick** in the tray menu, flip **Games see** to
   **Real stick** in HOTAS Mapper, or
@@ -366,6 +367,7 @@ throttle), plus button numbers above 16.
   vkb-mapper --xbox stick           # feed the virtual Xbox controller instead
   vkb-mapper --hide stick           # back to the Thrustmaster device
   vkb-mapper --status               # which stick feeds what
+  vkb-mapper --tray                 # the tray icon, if you quit it
   ```
 
   While exposed, the stick isn't grabbed or hidden and its virtual device is removed, so

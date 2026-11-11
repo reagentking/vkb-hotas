@@ -15,6 +15,7 @@ half a second, even while a game is running.
   vkb-mapper.py --xbox stick|throttle|all     make them feed a virtual Xbox 360 controller instead
   vkb-mapper.py --hide stick|throttle|all     back to the virtual Thrustmaster devices
   vkb-mapper.py --status                      show which stick feeds which role
+  vkb-mapper.py --tray                        the tray icon (switch sticks between virtual, Xbox and real)
 
 No extra packages needed. The server listens on 127.0.0.1 only, requires a
 per-session token, and exits shortly after the last browser tab closes.
@@ -914,7 +915,13 @@ def main():
     g.add_argument("--hide", choices=(*ROLES, "all"), metavar="ROLE",
                    help="back to normal: hide the real stick and emulate its Thrustmaster device")
     g.add_argument("--status", action="store_true", help="show which stick feeds which role, and exit")
+    g.add_argument("--tray", action="store_true",
+                   help="show the tray icon (HOTAS Tray): switch what games see of each stick from its menu")
+    ap.add_argument("--autostart", action="store_true", help=argparse.SUPPRESS)  # with --tray, from the login autostart
     args = ap.parse_args()
+    if args.tray:  # its own process: the tray is GTK 3 (libayatana-appindicator), the window GTK 4
+        tray = os.path.join(HERE, "vkb-tray.py")
+        os.execv(sys.executable, [sys.executable, tray, *(["--autostart"] if args.autostart else [])])
     if args.status or args.expose or args.hide or args.xbox:
         try:
             if args.status:

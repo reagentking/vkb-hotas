@@ -1,12 +1,10 @@
 [Desktop Entry]
 Type=Application
 Name=HOTAS Tray
-GenericName=Flight stick mode switch
 Comment=Tray icon to switch what games see of your sticks (virtual Thrustmaster, Xbox pad, or the real stick)
-Exec=vkb-tray
+Exec=vkb-mapper --tray --autostart
 Icon=vkb-hotas
 Terminal=false
-Categories=Settings;HardwareSettings;
-Keywords=joystick;hotas;vkb;tray;real stick;
+NoDisplay=true
 X-KDE-autostart-after=panel
 X-GNOME-Autostart-enabled=true

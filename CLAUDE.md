@@ -341,8 +341,13 @@ guards, and keeps them:
   the service-down state and reconnects every 2 s. Status `NeedsAttention` (dialog-warning icon)
   while any role is real; the title (tooltip) says what games see. A separate process because the
   window is GTK 4 and one process can't load both; single instance via an flock in
-  `$XDG_RUNTIME_DIR`. Installed to `/usr/local/bin/vkb-tray`, a menu entry, and
-  `/etc/xdg/autostart/vkb-tray.desktop` with `--autostart` (exits quietly when the socket belongs
+  `$XDG_RUNTIME_DIR`. Presented as part of HOTAS Mapper (user's choice, after asking whether a
+  separate app was standard): started by `vkb-mapper --tray` (execs `vkb-tray.py`, which stays a
+  separate process because of GTK 3 vs 4), reachable from the HOTAS Mapper menu entry's desktop
+  action "Show tray icon", and from `/etc/xdg/autostart/vkb-tray.desktop` (`NoDisplay=true`, Exec
+  `vkb-mapper --tray --autostart`; keep that file name, users' per-user Hidden overrides match
+  it). There's no tray menu entry or `/usr/local/bin/vkb-tray` any more (the installer removes the
+  old ones). `--autostart` is hidden in `--help`; the tray exits quietly when the socket belongs
   to another user or the bindings are missing; a user disabling it in Autostart settings gets a
   per-user override that survives reinstalls). Test it without a mouse over D-Bus: find it in
   `org.kde.StatusNotifierWatcher.RegisteredStatusNotifierItems`, read the menu with

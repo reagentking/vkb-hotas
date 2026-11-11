@@ -155,16 +155,17 @@ install -d "$lib/pictures"  # built-in stick map photos
 install -m644 "$here"/mapper/pictures/*.webp "$here/mapper/pictures/pictures.json" "$lib/pictures/"
 install -Dm755 "$here/mapper/vkb-tray.py" "$lib/vkb-tray.py"
 ln -sf "$lib/vkb-mapper.py" /usr/local/bin/vkb-mapper
-ln -sf "$lib/vkb-tray.py" /usr/local/bin/vkb-tray
+rm -f /usr/local/bin/vkb-tray /usr/local/share/applications/vkb-tray.desktop  # before 2026-11: own command + menu entry
 install -Dm644 "$here/mapper/vkb-mapper.desktop" /usr/local/share/applications/vkb-mapper.desktop
-install -Dm644 "$here/mapper/vkb-tray.desktop" /usr/local/share/applications/vkb-tray.desktop
 icons=/usr/local/share/icons/hicolor/scalable/apps
 install -Dm644 "$here/mapper/icons/vkb-hotas.svg" "$icons/vkb-hotas.svg"
 install -Dm644 "$here/mapper/icons/vkb-hotas-attention.svg" "$icons/vkb-hotas-attention.svg"
 # refresh an existing icon cache only: creating one would hide icons other programs add here later
 [[ -e /usr/local/share/icons/hicolor/icon-theme.cache ]] && gtk-update-icon-cache -q -t -f /usr/local/share/icons/hicolor 2>/dev/null || true
-# tray icon at login; turning it off in the desktop's autostart settings is stored per user and survives reinstalls
-sed 's/^Exec=vkb-tray$/Exec=vkb-tray --autostart/' "$here/mapper/vkb-tray.desktop" | install -Dm644 /dev/stdin /etc/xdg/autostart/vkb-tray.desktop
+# tray icon at login (vkb-mapper --tray); no menu entry of its own: HOTAS Mapper's has a "Show tray icon"
+# action. Turning it off in the desktop's autostart settings is stored per user (by this file name) and
+# survives reinstalls.
+install -Dm644 "$here/mapper/vkb-tray.desktop" /etc/xdg/autostart/vkb-tray.desktop
 install -Dm644 "$here/service/72-vkb-hotas.rules" "$rules"
 install -Dm644 "$here/service/vkb-hotas.service" /etc/systemd/system/vkb-hotas.service
 

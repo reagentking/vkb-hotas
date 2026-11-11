@@ -8,4 +8,9 @@ Icon=vkb-hotas
 Terminal=false
 StartupWMClass=io.github.reagentking.VkbHotasMapper
 Categories=Settings;HardwareSettings;
-Keywords=joystick;hotas;vkb;remap;flight stick;
+Keywords=joystick;hotas;vkb;remap;flight stick;tray;
+Actions=tray;
+
+[Desktop Action tray]
+Name=Show tray icon
+Exec=vkb-mapper --tray

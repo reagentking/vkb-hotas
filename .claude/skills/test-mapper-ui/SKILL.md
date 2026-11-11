@@ -120,7 +120,7 @@ example, press a button and check `out.b` has the mapped bit set, or send
   starts both tabs on the four photos of their hand (Front / Trigger side / Thumb side / Logo
   side) with the default pins but no hat pins.
 - **Tray** (puts an icon in the user's tray; outside the Bash sandbox, against the fake daemon):
-  `VKB_HOTAS_CTL=$DIR/ctl.sock mapper/vkb-tray.py &`, then find `…/NotificationItem/vkb_hotas_tray`
+  `VKB_HOTAS_CTL=$DIR/ctl.sock mapper/vkb-mapper.py --tray &` (execs `vkb-tray.py`), then find `…/NotificationItem/vkb_hotas_tray`
   in `gdbus call --session --dest org.kde.StatusNotifierWatcher --object-path /StatusNotifierWatcher
   --method org.freedesktop.DBus.Properties.Get org.kde.StatusNotifierWatcher RegisteredStatusNotifierItems`.
   Read its menu with `com.canonical.dbusmenu.GetLayout (0, -1, [])` on `<item>/Menu` (radio items
