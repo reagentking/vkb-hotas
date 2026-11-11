@@ -1,0 +1,379 @@
+{
+ "version": 1,
+ "comment": "Built-in stick map pictures (photos by the vkb-hotas author; MIT like the rest of the project). Default pins are placed when a view switches to the picture and has none yet; they follow the author's VKBDevCfg button numbering (placed by them in HOTAS Mapper). 'hats' attach to the user's 5-way hat with exactly those direction buttons, if there is one. Coordinates are fractions of the picture.",
+ "groups": {
+  "r": "VKB Gladiator NXT EVO Omni Throttle R (photos)",
+  "l": "VKB Gladiator NXT EVO Omni Throttle L (photos)"
+ },
+ "pictures": {
+  "vkb-otr-front": {
+   "group": "r",
+   "file": "vkb-otr-front.webp",
+   "label": "Front",
+   "pins": {
+    "3": [
+     0.1939,
+     0.2353
+    ],
+    "23": [
+     0.6778,
+     0.812
+    ],
+    "24": [
+     0.6778,
+     0.8774
+    ],
+    "25": [
+     0.3242,
+     0.812
+    ],
+    "26": [
+     0.3242,
+     0.8774
+    ],
+    "27": [
+     0.5061,
+     0.7143
+    ],
+    "28": [
+     0.3404,
+     0.7143
+    ],
+    "29": [
+     0.6616,
+     0.7143
+    ],
+    "hat": [
+     0.099,
+     0.1679
+    ]
+   },
+   "hats": [
+    {
+     "dirs": {
+      "up": 11,
+      "right": 12,
+      "down": 13,
+      "left": 14,
+      "center": 15
+     },
+     "at": [
+      0.2121,
+      0.0552
+     ]
+    },
+    {
+     "dirs": {
+      "up": 6,
+      "right": 7,
+      "down": 8,
+      "left": 9,
+      "center": 10
+     },
+     "at": [
+      0.2354,
+      0.1578
+     ]
+    },
+    {
+     "dirs": {
+      "up": 16,
+      "right": 17,
+      "down": 18,
+      "left": 19,
+      "center": 20
+     },
+     "at": [
+      0.388,
+      0.3147
+     ]
+    }
+   ]
+  },
+  "vkb-otr-trigger": {
+   "group": "r",
+   "file": "vkb-otr-trigger.webp",
+   "label": "Trigger side",
+   "pins": {
+    "1": [
+     0.8127,
+     0.2303
+    ],
+    "2": [
+     0.7885,
+     0.2826
+    ],
+    "4": [
+     0.9267,
+     0.1336
+    ],
+    "21": [
+     0.9096,
+     0.2504
+    ],
+    "22": [
+     0.9015,
+     0.2917
+    ]
+   },
+   "hats": []
+  },
+  "vkb-otr-thumb": {
+   "group": "r",
+   "file": "vkb-otr-thumb.webp",
+   "label": "Thumb side",
+   "pins": {
+    "3": [
+     0.3687,
+     0.3165
+    ],
+    "25": [
+     0.8726,
+     0.7734
+    ],
+    "26": [
+     0.9024,
+     0.8213
+    ],
+    "27": [
+     0.7643,
+     0.6756
+    ],
+    "28": [
+     0.7725,
+     0.73
+    ],
+    "29": [
+     0.7545,
+     0.6492
+    ],
+    "hat": [
+     0.3341,
+     0.2191
+    ]
+   },
+   "hats": [
+    {
+     "dirs": {
+      "up": 11,
+      "right": 12,
+      "down": 13,
+      "left": 14,
+      "center": 15
+     },
+     "at": [
+      0.2777,
+      0.0765
+     ]
+    },
+    {
+     "dirs": {
+      "up": 16,
+      "right": 17,
+      "down": 18,
+      "left": 19,
+      "center": 20
+     },
+     "at": [
+      0.5101,
+      0.3588
+     ]
+    }
+   ]
+  },
+  "vkb-otr-logo": {
+   "group": "r",
+   "file": "vkb-otr-logo.webp",
+   "label": "Logo side",
+   "pins": {
+    "1": [
+     0.584,
+     0.2886
+    ],
+    "2": [
+     0.4801,
+     0.3278
+    ],
+    "4": [
+     0.6029,
+     0.1843
+    ],
+    "5": [
+     0.3036,
+     0.4526
+    ],
+    "21": [
+     0.6596,
+     0.3365
+    ],
+    "22": [
+     0.5808,
+     0.3712
+    ]
+   },
+   "hats": []
+  },
+  "vkb-otl-front": {
+   "group": "l",
+   "file": "vkb-otl-front.webp",
+   "label": "Front",
+   "pins": {
+    "3": [
+     0.8036,
+     0.2669
+    ],
+    "hat": [
+     0.894,
+     0.1886
+    ]
+   },
+   "hats": [
+    {
+     "dirs": {
+      "up": 11,
+      "right": 12,
+      "down": 13,
+      "left": 14,
+      "center": 15
+     },
+     "at": [
+      0.7701,
+      0.0734
+     ]
+    },
+    {
+     "dirs": {
+      "up": 6,
+      "right": 7,
+      "down": 8,
+      "left": 9,
+      "center": 10
+     },
+     "at": [
+      0.7567,
+      0.1952
+     ]
+    },
+    {
+     "dirs": {
+      "up": 16,
+      "right": 17,
+      "down": 18,
+      "left": 19,
+      "center": 20
+     },
+     "at": [
+      0.596,
+      0.3691
+     ]
+    }
+   ]
+  },
+  "vkb-otl-trigger": {
+   "group": "l",
+   "file": "vkb-otl-trigger.webp",
+   "label": "Trigger side",
+   "pins": {
+    "1": [
+     0.2517,
+     0.2169
+    ],
+    "2": [
+     0.3104,
+     0.2843
+    ],
+    "4": [
+     0.1744,
+     0.1169
+    ],
+    "21": [
+     0.1651,
+     0.2669
+    ],
+    "22": [
+     0.1713,
+     0.2038
+    ],
+    "25": [
+     0.8545,
+     0.7647
+    ],
+    "26": [
+     0.904,
+     0.8278
+    ],
+    "27": [
+     0.7432,
+     0.6626
+    ],
+    "28": [
+     0.7679,
+     0.7234
+    ],
+    "29": [
+     0.742,
+     0.623
+    ]
+   },
+   "hats": []
+  },
+  "vkb-otl-thumb": {
+   "group": "l",
+   "file": "vkb-otl-thumb.webp",
+   "label": "Thumb side",
+   "pins": {
+    "5": [
+     0.5113,
+     0.4299
+    ]
+   },
+   "hats": [
+    {
+     "dirs": {
+      "up": 16,
+      "right": 17,
+      "down": 18,
+      "left": 19,
+      "center": 20
+     },
+     "at": [
+      0.3548,
+      0.393
+     ]
+    }
+   ]
+  },
+  "vkb-otl-logo": {
+   "group": "l",
+   "file": "vkb-otl-logo.webp",
+   "label": "Logo side",
+   "pins": {
+    "1": [
+     0.3238,
+     0.2212
+    ],
+    "2": [
+     0.4235,
+     0.2821
+    ],
+    "4": [
+     0.2604,
+     0.0973
+    ],
+    "5": [
+     0.6591,
+     0.4169
+    ],
+    "21": [
+     0.2574,
+     0.2473
+    ],
+    "22": [
+     0.3178,
+     0.2865
+    ]
+   },
+   "hats": []
+  }
+ }
+}

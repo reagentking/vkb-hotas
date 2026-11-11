@@ -391,7 +391,8 @@ guards, and keeps them:
   14 = user game defaults (`PUT`/`DELETE /api/references/u-…`); 15 = two-stage triggers (section
   `stages`; an older server's normalizer would drop them on save); 16 = Xbox controller mode (the
   `xbox` section, `/api/mode`, `--xbox`); 17 = `twcs-side` / `twcs-front` drawings;
-  18 = `slider_with_throttle` (an older server's normalizer would drop it on save).
+  18 = `slider_with_throttle` (an older server's normalizer would drop it on save);
+  19 = built-in photos (`/api/picture/<id>`, `layout.pictures`; their ids are drawing names).
 - **Two-stage triggers:** physically a full pull always passes through stage 1, so remapping alone
   can't free stage 2's button. `PhysState.active(n, now)` treats a `stages` stage-1 button as
   released while its stage-2 button is held, and (with `delay`) until held `delay` ms; the loop's
@@ -474,6 +475,35 @@ guards, and keeps them:
     - `evo-ot-straight` is the whole stick without the OTA bracket and tilt (the user asked for it):
       the page builds it from `evo-ot-side` by string replacement (shorter mast, grip group at
       `translate(200 300) scale(-1 1)`), so grip fixes apply to both. Not a default view.
+    - **Built-in photos** (`mapper/pictures/`, installed to `lib/pictures/`): the user's own
+      photos of their right and left Omni Throttles (MIT, theirs to license; the user decided
+      against copying another project's unattributed product photos). `pictures.json` lists
+      `{id: {file, label, group, pins, hats}}`; ids are added to `SCHEMATICS`, so a photo is chosen
+      like a drawing (`view.schematic = id`, pins under `draw:<id>`, never ending in `-l`, i.e.
+      never CSS-mirrored), served by `GET /api/picture/<id>` and listed in `GET /api/layout`'s
+      `pictures`; the page lists them first in the drawing dropdown (`addPictureOptions`, above the
+      drawings; the user asked). On picking one in the dropdown, the page seeds `layout.pins["draw:<id>"]` once
+      (only when absent: an empty pin set is dropped by the normalizer, so seeding on render would
+      bring deleted pins back) from `pins` plus `hats` (`{dirs, at}`, attached to the user's hat
+      with exactly those direction buttons; none is created). Default pins are the user's
+      numbering, identified with them from a lettered photo: main hat = left head hat, "hat"
+      11-15 = top knob, Hat 2 6-10 = centre hat, Hat 3 16-20 = thumb-side knurled knob, 3 = red,
+      1/2 = trigger, 4 = white button, 21/22 = black paddle, 5 = grey button low on the grip.
+      The defaults were then replaced by the user's own placements on all eight photos (copied
+      from their `layout.json`; hat pins converted to `{dirs, at}`).
+      **Default views:** `default_device_layout(role)` gives a role the four photos of its hand
+      (Front / Trigger side / Thumb side / Logo side, with the plain default pins; no hats, since a
+      new map has none) when `stick_hand(role)` says the stick is a VKB Gladiator: from the
+      daemon's `hello` device (vendor `231d`, "Gladiator" in the name; left if pid `3201` or the
+      name has "OT L" / ends in " L"), else from the configured selector (`231d:3200` / `3201`
+      only). Other sticks, unknown VKB models and an unconfigured stick keep the drawings.
+      `default_layout()` (was the `DEFAULT_LAYOUT` constant) is built per request, when there's no
+      `layout.json` yet; `normalize_layout` uses the same per-role default for a missing role.
+      Existing layouts are never changed.
+      Production: photos on a plain floor in daylight, cut out with rembg (`isnet-general-use`)
+      in a throwaway venv (onnxruntime tried to send telemetry; disable it), largest-piece
+      cleanup, a 9 px opening to drop a cable, WebP q88 (30-75 KB each). Colour thresholds and
+      hand-tracing were tried first and were much worse.
     - `twcs-side` / `twcs-front`: the Thrustmaster TWCS Throttle (user's request, for throttles that
       aren't Omni Throttles), laid out from Thrustmaster's manual and the HOTAS wiki: thumb cluster
       8-way POV + 4-way hats (B7-10, B11-14) + thumb B1; mini-stick (push B6); middle-finger

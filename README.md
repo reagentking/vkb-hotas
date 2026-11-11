@@ -179,6 +179,13 @@ each tab has its own panels:
   **Thrustmaster TWCS Throttle** in two views (thumb side with the hats, and front with the
   mini-stick, rocker switch, wheel and rudder paddle) for throttles that aren't Omni Throttles,
   and generic outlines for other sticks. Each real stick has its own stick map.
+  **Built-in photos:** the same dropdown also has real photos of the VKB Gladiator NXT EVO
+  Omni Throttle, right and left hand, each from the front, trigger side, thumb side and logo
+  side. When the real stick is a VKB Gladiator, a new stick map starts with these photos (the
+  right- or left-hand set, from the stick's id or name) instead of the drawings. Picking a photo
+  places pins for the author's button numbering (VKBDevCfg setups differ, so press each control
+  to check its pin lights up, then drag or × to fix). 5-way hat pins attach to your own hats
+  with the same buttons; a new map gets them once you've set up the hats and pick the photo.
   **Pins belong to the picture**: each drawing and each photo keeps its own pins, so changing a
   view's drawing shows that drawing's pins and changing back restores the old ones. Add your own
   views, and swap any drawing for a photo of your stick with **Photo…** (PNG/JPEG/WebP, up to
@@ -410,7 +417,7 @@ throttle stick ┘     ▲              ▲      │    ├─▶ virtual TWCS T
 |---|---|
 | `install.sh`, `uninstall.sh` | system install/removal (everything is installed flat into `/usr/local/lib/vkb-hotas`) |
 | `service/` | the root daemon `vkb-hotas.py`, its systemd unit, config template `vkb-hotas.default` and udev rule `72-vkb-hotas.rules` |
-| `mapper/` | HOTAS Mapper: server `vkb-mapper.py`, page `vkb-mapper.html` (standard library only, no build), its window `vkb_mapper_app.py` (GTK4 + WebKitGTK, optional), the tray icon `vkb-tray.py` (+ `vkb-tray.desktop`), the app icons `icons/`, game default references `game-defaults.json` and menu entry `vkb-mapper.desktop` |
+| `mapper/` | HOTAS Mapper: server `vkb-mapper.py`, page `vkb-mapper.html` (standard library only, no build), its window `vkb_mapper_app.py` (GTK4 + WebKitGTK, optional), built-in stick photos `pictures/` (+ `pictures.json` with their default pins), the tray icon `vkb-tray.py` (+ `vkb-tray.desktop`), the app icons `icons/`, game default references `game-defaults.json` and menu entry `vkb-mapper.desktop` |
 | `common/` | `vkb_common.py`: config, roles, device selection, the mapping format and terminal pickers shared by everything |
 | `tools/` | helpers you run as your user: `proton-setup.py` (per-game prefix setup), `vkb-check.py` (setup and Proton-log diagnostics), `vkb-learn.py` (axis discovery) |
 | `dev/` | `fake-daemon.py`: the daemon's real event loop with simulated left and right Omni Throttles (and a stand-in Xbox pad), for working on the GUI without root |

@@ -414,6 +414,8 @@ const physRole = () => home(role);                        // the stick shown in 
 const group = r => r === "xbox" ? ["xbox"] : ROLES;       // sections in which a physical control drives one output
 const modeOf = r => hello?.roles?.[r]?.mode || (hello?.roles?.[r]?.exposed ? "real" : "virtual");
 let role = "stick", layoutAll = null, readOnly = false, gameRefs = {};
+// built-in photos (server: pictures/pictures.json): {id: {label, group, pins, hats}}; chosen like drawings
+let PICTURES = {};
 // the selected game-defaults reference for this role ({buttons, hat, axes}) or null
 const curRef = () => { const id = mapping?.profiles?.[mapping.active]?.reference; return id && gameRefs[id] ? gameRefs[id][role] : null; };
 const curRefInfo = () => gameRefs[mapping?.profiles?.[mapping.active]?.reference] || null;
@@ -1462,13 +1464,18 @@ function renderMap() {
   $("#schemSel").value = v.schematic; $("#schemSel").hidden = !!v.image; $("#schemBtn").hidden = !v.image;
   $("#placeBtn").classList.toggle("on", !!placing); $("#placeBtn").textContent = placing ? "Done placing" : "Place pins";
   const cv = $("#canvas"); cv.textContent = ""; cv.classList.toggle("placing", !!placing);
-  if (v.image) { const img = el("img"); img.alt = v.name; img.onload = applyZoom; img.src = `/api/image/${encodeURIComponent(v.image)}?t=${encodeURIComponent(TOKEN)}`; img.draggable = false; cv.append(img); }
-  else {
+  const pic = !v.image && PICTURES[v.schematic];
+  if (v.image || pic) {
+    const img = el("img"); img.alt = v.name; img.onload = applyZoom; img.draggable = false;
+    img.src = v.image ? `/api/image/${encodeURIComponent(v.image)}?t=${encodeURIComponent(TOKEN)}`
+                      : `/api/picture/${encodeURIComponent(v.schematic)}?t=${encodeURIComponent(TOKEN)}`;
+    cv.append(img);
+  } else {
     // "-l" drawings are the left-hand (mirrored) versions
     cv.insertAdjacentHTML("beforeend", SCHEM[v.schematic] || SCHEM[v.schematic.replace(/-l$/, "")] || SCHEM["evo-ot-side"]);
     if (v.schematic.endsWith("-l")) cv.querySelector("svg").style.transform = "scaleX(-1)";
   }
-  $("#watermark").hidden = !!v.image;
+  $("#watermark").hidden = !!(v.image || pic);
   const rev = reverseMap(), pins = layout.pins[picKey(v)] || {};
   refs.pins = {};
   for (const [key, [x, y]] of Object.entries(pins)) {
@@ -1538,7 +1545,7 @@ function startPlacing() {
 function stopPlacing() { placing = null; renderMap(); }
 function updatePlaceHint() {
   const h = $("#placeHint");
-  if (!placing) { h.textContent = layout && !Object.keys(layout.pins[picKey(curView())] || {}).length ? "No pins on this drawing yet. Click “Place pins” and press buttons on your stick. (Each drawing and photo keeps its own pins.)" : ""; return; }
+  if (!placing) { h.textContent = layout && !Object.keys(layout.pins[picKey(curView())] || {}).length ? "No pins on this picture yet. Click “Place pins” and press buttons on your stick. (Each drawing and photo keeps its own pins.)" : ""; return; }
   h.textContent = placing.pending ? `Now click where ${pinWhat(placing.pending)} is (Esc to stop).` : "Press a button or push the hat on your stick… (a 5-way hat's buttons place the whole hat; drag to adjust, × removes)";
 }
 function detectPlacing(m) {
@@ -1580,7 +1587,39 @@ function saveLayout(now) {
   layoutTimer = setTimeout(go, 300);
 }
 $("#placeBtn").onclick = () => placing ? stopPlacing() : startPlacing();
-$("#schemSel").onchange = e => { curView().schematic = e.target.value; saveLayout(); renderMap(); };
+$("#schemSel").onchange = e => {
+  const id = e.target.value; curView().schematic = id;
+  const placed = PICTURES[id] && !layout.pins[`draw:${id}`] ? seedPicturePins(id) : 0;
+  saveLayout(); renderMap();
+  if (placed) toast(`Placed ${placed} pin${placed > 1 ? "s" : ""} from the built-in picture. Press each control to check its pin lights; drag to adjust, × to remove.`);
+};
+// a built-in photo's default pins, the first time a view shows it; hats attach to the user's 5-way hat
+// with exactly those direction buttons (none is created)
+function seedPicturePins(id) {
+  const d = PICTURES[id], pins = {};
+  const inHat = new Set((layout.hats || []).flatMap(h => Object.values(h.dirs)));
+  for (const [k, xy] of Object.entries(d.pins || {})) if (k === "hat" || !inHat.has(+k)) pins[k] = [...xy];
+  for (const h of d.hats || []) {
+    const want = JSON.stringify(Object.entries(h.dirs).sort());
+    const mine = (layout.hats || []).find(x => JSON.stringify(Object.entries(x.dirs).sort()) === want);
+    if (mine) pins[`c:${mine.id}`] = [...h.at];
+  }
+  if (Object.keys(pins).length) layout.pins[`draw:${id}`] = pins;
+  return Object.keys(pins).length;
+}
+// the drawing dropdown gets one group per built-in photo set, listed first (above the drawings)
+function addPictureOptions() {
+  const sel = $("#schemSel"); sel.querySelectorAll("optgroup.pics").forEach(g => g.remove());
+  const groups = {};
+  for (const [id, p] of Object.entries(PICTURES)) (groups[p.group] ||= []).push([id, p]);
+  const first = sel.firstElementChild;
+  for (const [name, list] of Object.entries(groups)) {
+    const g = el("optgroup", "pics"); g.label = name;
+    for (const [id, p] of list) { const o = el("option", null, p.label); o.value = id; g.append(o); }
+    sel.insertBefore(g, first);
+  }
+  if (layout) sel.value = curView().schematic;  // keep the selection after reordering
+}
 $("#schemBtn").onclick = () => { curView().image = null; saveLayout(true); renderMap(); };
 $("#photoBtn").onclick = () => $("#photoFile").click();
 $("#photoFile").onchange = async e => {
@@ -1799,14 +1838,14 @@ function connect() {
     const [r, l] = await Promise.all([api("GET", "/api/mapping"), api("GET", "/api/layout")]);
     try { const g = await api("GET", "/api/references"); gameRefs = g.references || {}; if (g.error) toast("Game defaults couldn't be read: " + g.error, true); } catch (e) { gameRefs = {}; }
     mapping = r.mapping;
-    if (l.api !== 18) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
+    if (l.api !== 19) {  // page updated on disk but an older mapper server is still running: it would drop new data on save
       readOnly = true; layoutAll = layout = null;
       for (const [k, p] of Object.entries(mapping.profiles)) { if (!p.stick) mapping.profiles[k] = {stick: p, throttle: freshRole("throttle")}; mapping.profiles[k].xbox ||= freshXbox(); }
       for (const sel of [".maptools", ".stage"]) document.querySelector(sel).hidden = true;
       $("#placeHint").textContent = "Stick map unavailable: restart HOTAS Mapper (an older version is still running).";
       toast("HOTAS Mapper was updated. Close this tab, wait a minute and reopen HOTAS Mapper (or restart it). Nothing is saved until then, so nothing gets lost.", true);
       setTimeout(() => toast("Restart HOTAS Mapper to make changes.", true), 6500);
-    } else { layoutAll = l.layout; layout = layoutAll.devices[physRole()]; }
+    } else { layoutAll = l.layout; layout = layoutAll.devices[physRole()]; PICTURES = l.pictures || {}; addPictureOptions(); }
     if (l.error) toast("Stick layout couldn't be read (" + l.error + "); showing defaults.", true);
     $("#foot").textContent = `mapping file: ${r.path}` + (r.exists ? "" : " (created on first change)");
     if (r.error) toast("Existing mapping file couldn't be read (" + r.error + "); showing defaults.", true);

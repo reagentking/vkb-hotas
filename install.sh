@@ -151,6 +151,8 @@ install -Dm755 "$here/mapper/vkb-mapper.py"   "$lib/vkb-mapper.py"
 install -Dm644 "$here/mapper/vkb-mapper.html" "$lib/vkb-mapper.html"
 install -Dm644 "$here/mapper/game-defaults.json" "$lib/game-defaults.json"
 install -Dm644 "$here/mapper/vkb_mapper_app.py" "$lib/vkb_mapper_app.py"
+install -d "$lib/pictures"  # built-in stick map photos
+install -m644 "$here"/mapper/pictures/*.webp "$here/mapper/pictures/pictures.json" "$lib/pictures/"
 install -Dm755 "$here/mapper/vkb-tray.py" "$lib/vkb-tray.py"
 ln -sf "$lib/vkb-mapper.py" /usr/local/bin/vkb-mapper
 ln -sf "$lib/vkb-tray.py" /usr/local/bin/vkb-tray

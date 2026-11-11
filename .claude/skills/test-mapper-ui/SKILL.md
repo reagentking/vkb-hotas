@@ -109,6 +109,16 @@ example, press a button and check `out.b` has the mapped bit set, or send
   own pid (not a `timeout` wrapper) exits 0 and removes `$XDG_RUNTIME_DIR/vkb-mapper/url-<key>`;
   `env -u WAYLAND_DISPLAY -u DISPLAY …` falls back to the browser. Export/Photo/Import dialogs need a
   person to click.
+- **Built-in photos:** start the stack with `--layout` pointing at a copy of a layout that has
+  5-way hats (e.g. the user's, copied read-only) so hat seeding can match. The drawing dropdown
+  has "… Omni Throttle R (photos)" and "… L (photos)" groups; picking R "Front" shows the WebP
+  (`/api/picture/vkb-otr-front`), toasts "Placed 11 pins…", and `layout.pins["draw:vkb-otr-front"]`
+  has 3, 23-29, `hat` and `c:<id>` for the hats whose dirs are 11-15 and 6-10; picking it again
+  places nothing new; L photos place none. Zoom in (`zstate()`, `applyZoom()`) to check each pin
+  sits on its control. `GET /api/layout` keeps the view's `schematic` and the `draw:vkb-*` pins.
+  A fresh stack (no `--layout`; the fake sticks are "VKBsim Gladiator EVO OT R/L", 3200/3201)
+  starts both tabs on the four photos of their hand (Front / Trigger side / Thumb side / Logo
+  side) with the default pins but no hat pins.
 - **Tray** (puts an icon in the user's tray; outside the Bash sandbox, against the fake daemon):
   `VKB_HOTAS_CTL=$DIR/ctl.sock mapper/vkb-tray.py &`, then find `…/NotificationItem/vkb_hotas_tray`
   in `gdbus call --session --dest org.kde.StatusNotifierWatcher --object-path /StatusNotifierWatcher

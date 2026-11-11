@@ -44,14 +44,15 @@ HERE = os.path.dirname(os.path.realpath(__file__))
 # vkb_common lives in ../common in the repo and next to this file once installed
 sys.path[:0] = [HERE, os.path.join(os.path.dirname(HERE), "common")]
 from vkb_common import (DEFAULT_AXES, EMU_AXES, HAT_DIRS, MODES, ROLE_AXES, ROLES, XBOX_BUTTONS,  # noqa: E402
-                        default_profile, load_mapping, mapping_path, normalize_mapping, read_config)
+                        VKB_VENDOR, default_profile, load_mapping, mapping_path, normalize_mapping,
+                        parse_match, read_config, role_selectors)
 
 CTL = os.environ.get("VKB_HOTAS_CTL", "/run/vkb-hotas/ctl.sock")
 PAGE = os.path.join(HERE, "vkb-mapper.html")
 GAME_DEFAULTS = os.path.join(HERE, "game-defaults.json")
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "vkb-mapper")
 IDLE_EXIT = 45  # seconds without any open UI before the server quits
-API_VERSION = 18  # bump when the page needs server features; the page refuses to save anything on a mismatch
+API_VERSION = 19  # bump when the page needs server features; the page refuses to save anything on a mismatch
 
 
 def initial_mapping():
@@ -94,11 +95,63 @@ def initial_mapping():
 # stick role's). normalize_layout converts both.
 EVO = ("evo-ot-side", "evo-ot-straight", "evo-scg-head", "evo-scg-side", "evo-base-front")
 TWCS = ("twcs-side", "twcs-front")  # Thrustmaster TWCS Throttle, for throttles that aren't Omni Throttles
-SCHEMATICS = (*EVO, *(s + "-l" for s in EVO), *TWCS, "grip-front", "grip-back", "base")
+
+
+def load_pictures():
+    """Built-in photos (pictures/pictures.json): {id: {file, label, group, pins, hats}}. Chosen like a
+    drawing (view "schematic" = the id, pins under "draw:<id>"), shown from /api/picture/<id>."""
+    for d in (os.path.join(HERE, "pictures"), os.path.join(os.path.dirname(HERE), "mapper", "pictures")):
+        try:
+            data = json.load(open(os.path.join(d, "pictures.json")))
+        except (OSError, ValueError):
+            continue
+        groups = data.get("groups") or {}
+        return d, {pid: {**p, "group": groups.get(p.get("group"), p.get("group") or "Photos")}
+                   for pid, p in (data.get("pictures") or {}).items()
+                   if re.fullmatch(r"[a-z0-9-]{1,40}", pid) and not pid.endswith("-l")
+                   and os.path.exists(os.path.join(d, p.get("file", "")))}
+    return None, {}
+
+
+PICTURE_DIR, PICTURES = load_pictures()
+SCHEMATICS = (*EVO, *(s + "-l" for s in EVO), *TWCS, "grip-front", "grip-back", "base", *PICTURES)
 CLUSTER_DIRS = ("up", "right", "down", "left", "center")
 
 
-def default_device_layout(role):
+GLADIATOR_VIEWS = (("front", "Front"), ("trigger", "Trigger side"), ("thumb", "Thumb side"), ("logo", "Logo side"))
+
+
+def stick_hand(role):
+    """"r" or "l" when the role's real stick is a VKB Gladiator (its photos are built in), else None.
+    From the connected stick's id and name (daemon), else the configured selector."""
+    vid = pid = None
+    name = ""
+    try:
+        dev = (daemon_hello().get("roles") or {}).get(role, {}).get("device") or {}
+        if dev.get("id"):
+            vid, pid = (int(x, 16) for x in dev["id"].split(":"))
+            name = dev.get("name") or ""
+    except (OSError, ValueError, AttributeError, TypeError):
+        pass
+    if vid is None:
+        sel = role_selectors().get(role) or ""
+        if not sel:
+            return None  # throttle: none; stick: "any VKB stick", model unknown
+        vid, pid = parse_match(sel)
+    if vid != VKB_VENDOR or (name and "Gladiator" not in name) or (not name and pid not in (0x3200, 0x3201)):
+        return None
+    return "l" if pid == 0x3201 or re.search(r"\bOT L\b|\sL\s*$", name) else "r"
+
+
+def default_device_layout(role, hand="auto"):
+    """A role's starting stick map: the built-in photos of its VKB Gladiator (matching hand, with
+    their default pins; 5-way hat pins need hats, which a new map doesn't have), else drawings."""
+    hand = stick_hand(role) if hand == "auto" else hand
+    photos = [(vid, name, f"vkb-ot{hand}-{vid}") for vid, name in GLADIATOR_VIEWS] if hand else []
+    if photos and all(pid in PICTURES for _, _, pid in photos):
+        return {"views": [{"id": vid, "name": name, "schematic": pid, "image": None} for vid, name, pid in photos],
+                "hats": [], "names": {},
+                "pins": {f"draw:{pid}": dict(PICTURES[pid]["pins"]) for _, _, pid in photos if PICTURES[pid]["pins"]}}
     l = "-l" if role == "throttle" else ""
     return {"views": [
         {"id": "stick", "name": "Whole stick", "schematic": "evo-ot-side" + l, "image": None},
@@ -108,7 +161,9 @@ def default_device_layout(role):
         "hats": [], "pins": {}, "names": {}}
 
 
-DEFAULT_LAYOUT = {"version": 7, "devices": {r: default_device_layout(r) for r in ROLES}}
+def default_layout():
+    """The layout before the user saves one; picked per role from the sticks connected now."""
+    return {"version": 7, "devices": {r: default_device_layout(r) for r in ROLES}}
 IMAGE_TYPES = {b"\x89PNG\r\n\x1a\n": "png", b"\xff\xd8\xff": "jpg"}
 IMAGE_MAX = 10 << 20
 IMAGE_NAME = re.compile(r"^[a-z0-9_-]{1,24}-[0-9a-f]{8}\.(png|jpg|webp)$")
@@ -520,10 +575,12 @@ class Handler(BaseHTTPRequestHandler):
                 if isinstance(raw, dict) and raw.get("version", 1) < lay["version"]:
                     backup_layout(raw.get("version", 1))
             except FileNotFoundError:
-                lay, err = DEFAULT_LAYOUT, None
+                lay, err = default_layout(), None
             except (OSError, ValueError) as e:
-                lay, err = DEFAULT_LAYOUT, str(e)
-            self._send(200, {"layout": lay, "error": err, "api": API_VERSION})
+                lay, err = default_layout(), str(e)
+            self._send(200, {"layout": lay, "error": err, "api": API_VERSION,
+                             "pictures": {pid: {k: p[k] for k in ("label", "group", "pins", "hats")}
+                                          for pid, p in PICTURES.items()}})
         elif path == "/api/references":
             try:
                 self._send(200, {"references": load_game_defaults(), "error": None})
@@ -539,6 +596,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "not found"})
             ctype = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}[name.rsplit(".", 1)[1]]
             self._send(200, data, ctype)
+        elif path.startswith("/api/picture/"):
+            pid = path.rsplit("/", 1)[1]
+            p = PICTURES.get(pid)
+            if not p:
+                return self._send(404, {"error": "not found"})
+            try:
+                data = open(os.path.join(PICTURE_DIR, p["file"]), "rb").read()
+            except OSError:
+                return self._send(404, {"error": "not found"})
+            self._send(200, data, "image/webp" if p["file"].endswith(".webp") else "image/png")
         elif path == "/api/events":
             self._events()
         else:
