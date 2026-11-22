@@ -30,8 +30,8 @@ is to confirm three things. Each one has failed at least once before:
      `/usr/local/lib/vkb-hotas/vkb-hotas.py`, and so on), so the layout itself never causes
      `DIFFERS`.
    - `API_VERSION repo != installed`: not reinstalled yet.
-   - A mapper marked `STALE`: tell the user to close the HOTAS Mapper tab, wait about a minute
-     (it exits 45 s after its last tab closes), and reopen it.
+   - A mapper marked `STALE`: tell the user to close HOTAS Mapper and reopen it. Its own window
+     stops the server at once; in browser mode it exits about 45 s after the last tab closes.
    - Any `FAIL` in the health section: see `journalctl -u vkb-hotas -b`. A common cause is a bad
      `VKB_HOTAS_ARGS` in `/etc/default/vkb-hotas`; inline `# comments` there break it.
    - A file marked `INVALID`: don't "fix" it silently. Explain, and offer a fix with a backup.

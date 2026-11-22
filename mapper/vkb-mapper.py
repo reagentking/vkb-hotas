@@ -17,18 +17,17 @@ half a second, even while a game is running.
   vkb-mapper.py --status                      show which stick feeds which role
   vkb-mapper.py --tray                        the tray icon (switch sticks between virtual, Xbox and real)
 
-No extra packages needed. The server listens on 127.0.0.1 only, requires a
-per-session token, and exits shortly after the last browser tab closes.
+No extra packages needed. The server listens on 127.0.0.1 only and requires a
+per-session token. Closing the window stops it; in the browser it exits about 45 s after
+the last tab closes.
 """
 import argparse
 import hashlib
 import hmac
 import json
-import math
 import os
 import re
 import secrets
-import shlex
 import shutil
 import signal
 import socket
@@ -44,33 +43,28 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.realpath(__file__))
 # vkb_common lives in ../common in the repo and next to this file once installed
 sys.path[:0] = [HERE, os.path.join(os.path.dirname(HERE), "common")]
-from vkb_common import (DEFAULT_AXES, EMU_AXES, HAT_DIRS, MODES, ROLE_AXES, ROLES, XBOX_BUTTONS,  # noqa: E402
+from vkb_common import (HAT_DIRS, MODES, ROLE_AXES, ROLES, SELECTOR, XBOX_BUTTONS,  # noqa: E402
                         VKB_VENDOR, default_profile, load_mapping, mapping_path, normalize_mapping,
-                        parse_match, read_config, role_selectors)
+                        parse_match, role_selectors)
 
 CTL = os.environ.get("VKB_HOTAS_CTL", "/run/vkb-hotas/ctl.sock")
 PAGE = os.path.join(HERE, "vkb-mapper.html")
 GAME_DEFAULTS = os.path.join(HERE, "game-defaults.json")
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "vkb-mapper")
 IDLE_EXIT = 45  # seconds without any open UI before the server quits
-API_VERSION = 19  # bump when the page needs server features; the page refuses to save anything on a mismatch
+API_VERSION = 20  # bump when the page needs server features; the page refuses to save anything on a mismatch
 
 
 def initial_mapping():
-    """First-run mapping that mirrors the daemon's VKB_HOTAS_ARGS defaults."""
-    args = shlex.split(read_config().get("VKB_HOTAS_ARGS", ""))
-    count, axes, invert = 16, dict(DEFAULT_AXES), []
-    for i, a in enumerate(args):
-        nxt = args[i + 1] if i + 1 < len(args) else ""
-        if a == "--button-count" and nxt in ("16", "32"):
-            count = int(nxt)
-        elif a == "--invert" and nxt.upper() in EMU_AXES:
-            invert.append(nxt.upper())
-        elif a == "--axis" and "=" in nxt:
-            k, v = nxt.split("=", 1)
-            if k.upper() in EMU_AXES:
-                axes[k.upper()] = v.upper()
-    return normalize_mapping({"active": "Default", "profiles": {"Default": default_profile(count, axes, invert)}})
+    """The mapping shown before the first save: the daemon's built-in default, fitted to the
+    connected sticks' axes the same way the daemon fits it."""
+    try:
+        roles = daemon_hello().get("roles") or {}
+        axes = {r: {a["name"] for a in (info.get("device") or {}).get("axes", [])}
+                for r, info in roles.items() if r in ROLES and info.get("device")}
+    except (OSError, ValueError, AttributeError, TypeError):
+        axes = {}
+    return normalize_mapping({"active": "Default", "profiles": {"Default": default_profile(axes)}})
 
 
 # ---- Stick layout (pictures + pin positions) ------------------------------------
@@ -86,14 +80,14 @@ def initial_mapping():
 #    "names": {"1": "Trigger stage 1", "21": "Rapid-fire up"}}
 # Pins are anchored to the *picture* (a drawing or a photo), not to the view showing it, so
 # switching a view's drawing shows that drawing's own pins and never misplaces them. Pin keys:
-# physical button numbers ("1".."128"), "hat" (the stick's real hat) or "c:<hat id>" (where a
+# physical button numbers ("1".."128"), "hat" / "hat2".."hat4" (the stick's real hats) or "c:<hat id>" (where a
 # 5-way hat sits on that picture); coordinates are 0..1 fractions.
 # hats are multi-way hats that report as separate buttons (VKB's 4-way hats with center push);
 # they're hardware, defined once and placeable on any picture; each direction is learned by
 # pressing it. Names are the user's labels for physical buttons, shown wherever a button appears.
-# Drawings ending in "-l" are the mirrored (left-hand) versions of the EVO drawings.
-# Version 1 kept pins and hats per view; version 2 was one DEVICE at the top level (the
-# stick role's). normalize_layout converts both.
+# Drawings ending in "-l" are the mirrored (left-hand) versions of the EVO drawings. Built-in
+# photos are chosen like drawings: "schematic" is the photo's id and its pins are "draw:<id>".
+# Files from before version 7 (October 2026) aren't converted: see normalize_layout.
 EVO = ("evo-ot-side", "evo-ot-straight", "evo-scg-head", "evo-scg-side", "evo-base-front")
 TWCS = ("twcs-side", "twcs-front")  # Thrustmaster TWCS Throttle, for throttles that aren't Omni Throttles
 
@@ -122,44 +116,51 @@ CLUSTER_DIRS = ("up", "right", "down", "left", "center")
 GLADIATOR_VIEWS = (("front", "Front"), ("trigger", "Trigger side"), ("thumb", "Thumb side"), ("logo", "Logo side"))
 
 
-def stick_hand(role):
-    """"r" or "l" when the role's real stick is a VKB Gladiator (its photos are built in), else None.
-    From the connected stick's id and name (daemon), else the configured selector."""
+def stick_kind(role):
+    """What the role's real stick is, for picking its starting stick map: "r" / "l" for a right- or
+    left-hand VKB Gladiator (its photos are built in), "vkb" for another VKB stick (the EVO
+    drawings), None for anything else or no stick (generic outlines). From the connected stick's
+    id and name (daemon), else the configured selector."""
     vid = pid = None
     name = ""
     try:
-        dev = (daemon_hello().get("roles") or {}).get(role, {}).get("device") or {}
+        info = (daemon_hello().get("roles") or {}).get(role) or {}
+        sel = info.get("selector") or ""
+        dev = info.get("device") or {}
         if dev.get("id"):
             vid, pid = (int(x, 16) for x in dev["id"].split(":"))
             name = dev.get("name") or ""
     except (OSError, ValueError, AttributeError, TypeError):
-        pass
+        sel = role_selectors().get(role) or ""  # daemon not running: the configured stick
     if vid is None:
-        sel = role_selectors().get(role) or ""
-        if not sel:
-            return None  # throttle: none; stick: "any VKB stick", model unknown
+        if not SELECTOR.match(sel):
+            return None
         vid, pid = parse_match(sel)
-    if vid != VKB_VENDOR or (name and "Gladiator" not in name) or (not name and pid not in (0x3200, 0x3201)):
+    if vid != VKB_VENDOR:
         return None
+    if (name and "Gladiator" not in name) or (not name and pid not in (0x3200, 0x3201)):
+        return "vkb"
     return "l" if pid == 0x3201 or re.search(r"\bOT L\b|\sL\s*$", name) else "r"
 
 
-def default_device_layout(role, hand="auto"):
+def default_device_layout(role, kind="auto"):
     """A role's starting stick map: the built-in photos of its VKB Gladiator (matching hand, with
-    their default pins; 5-way hat pins need hats, which a new map doesn't have), else drawings."""
-    hand = stick_hand(role) if hand == "auto" else hand
-    photos = [(vid, name, f"vkb-ot{hand}-{vid}") for vid, name in GLADIATOR_VIEWS] if hand else []
+    their default pins; 5-way hat pins need hats, which a new map doesn't have), the EVO drawings
+    for another VKB stick, else the generic outlines."""
+    kind = stick_kind(role) if kind == "auto" else kind
+    photos = [(vid, name, f"vkb-ot{kind}-{vid}") for vid, name in GLADIATOR_VIEWS] if kind in ("r", "l") else []
     if photos and all(pid in PICTURES for _, _, pid in photos):
         return {"views": [{"id": vid, "name": name, "schematic": pid, "image": None} for vid, name, pid in photos],
                 "hats": [], "names": {},
                 "pins": {f"draw:{pid}": dict(PICTURES[pid]["pins"]) for _, _, pid in photos if PICTURES[pid]["pins"]}}
-    l = "-l" if role == "throttle" else ""
-    return {"views": [
-        {"id": "stick", "name": "Whole stick", "schematic": "evo-ot-side" + l, "image": None},
-        {"id": "head", "name": "Grip head", "schematic": "evo-scg-head" + l, "image": None},
-        {"id": "side", "name": "Triggers", "schematic": "evo-scg-side" + l, "image": None},
-        {"id": "base", "name": "Base front", "schematic": "evo-base-front" + l, "image": None}],
-        "hats": [], "pins": {}, "names": {}}
+    if kind is None:
+        views = [("front", "Grip front", "grip-front"), ("back", "Grip back", "grip-back"), ("base", "Base", "base")]
+    else:
+        l = "-l" if role == "throttle" or kind == "l" else ""
+        views = [("stick", "Whole stick", "evo-ot-side" + l), ("head", "Grip head", "evo-scg-head" + l),
+                 ("side", "Triggers", "evo-scg-side" + l), ("base", "Base front", "evo-base-front" + l)]
+    return {"views": [{"id": i, "name": n, "schematic": sch, "image": None} for i, n, sch in views],
+            "hats": [], "pins": {}, "names": {}}
 
 
 def default_layout():
@@ -191,112 +192,17 @@ def _xy(xy, what):
     return [round(xy[0], 4), round(xy[1], 4)]
 
 
-def _migrate_v1(lay, views):
-    """v1 kept pins/clusters per view id: re-anchor them to each view's current picture."""
-    by_id = {v["id"]: picture_key(v) for v in views}
-    pins, hats = {}, []
-    for vid, vp in (lay.get("pins") or {}).items():
-        if vid in by_id and isinstance(vp, dict):
-            pins.setdefault(by_id[vid], {}).update(vp)
-    for vid, cl in (lay.get("clusters") or {}).items():
-        for c in cl if isinstance(cl, list) else []:
-            if isinstance(c, dict):
-                hats.append({k: c.get(k) for k in ("id", "name", "dirs")})
-                if vid in by_id and c.get("xy") is not None:
-                    pins.setdefault(by_id[vid], {})[f"c:{c.get('id')}"] = c["xy"]
-    return pins, hats
-
-
-# The whole-stick drawing (evo-ot-side) changed twice; pins on its grip move with it, pins on the
-# base (below OT_BASE_TOP) never do:
-#  - before version 4 the bracket and grip were drawn on the left-hand side, from a left-hand grip
-#    drawing. Since version 6 that assembly is mirrored as a whole (right-hand OT, right-hand grip),
-#    so grip pins just mirror: x -> 1 - x, on the "-l" drawing too.
-#  - versions 4 and 5 mirrored the assembly but kept the grip's details unmirrored (inner
-#    scale(-1 1)), leaving the red button on the wrong side (the user reported it); converting from
-#    them flips each pin within the grip again (_flip_ot_grip_pin).
-OT_GRIP_ORIGIN, OT_GRIP_ANGLE, OT_BASE_TOP = (135, 238), math.radians(38), 330  # drawing units (400x500)
-
-
-def _mirror_ot_grip_pin(fx, fy, mirrored):
-    return [round(1 - fx, 4), fy] if fy * 500 < OT_BASE_TOP else [fx, fy]
-
-
-def _flip_ot_grip_pin(fx, fy, mirrored):
-    """p -> M(T(S(T^-1(M(p))))) for a pin on the grip (M = whole-picture mirror, S = grip-local
-    mirror, T = the grip's placement in the original drawing)."""
-    x, y = fx * 400, fy * 500
-    if y >= OT_BASE_TOP:
-        return [fx, fy]
-    if mirrored:
-        x = 400 - x
-    x = 400 - x  # undo the drawing's outer mirror
-    ox, oy = OT_GRIP_ORIGIN
-    c, s = math.cos(OT_GRIP_ANGLE), math.sin(OT_GRIP_ANGLE)
-    dx, dy = x - ox, y - oy
-    gx, gy = c * dx + s * dy, -s * dx + c * dy  # into the grip's own coordinates
-    gx = -gx
-    x, y = ox + c * gx - s * gy, oy + s * gx + c * gy
-    x = 400 - x
-    if mirrored:
-        x = 400 - x
-    return [round(min(1, max(0, x / 400)), 4), round(min(1, max(0, y / 500)), 4)]
-
-
-# Version 7 moved the grip's thumb-side bump (mini-stick) to the other side of the grip on the
-# whole-stick drawing (the user's correction); pins on it move along: a mirror within the grip about
-# local x = 1. Applied to version-6 coordinates (grip = the original assembly mirrored as a whole).
-OT_BUMP, OT_BUMP_RADIUS = (-47, -128), 40  # grip coordinates, before the move
-
-
-def _move_ot_bump_pin(fx, fy, mirrored):
-    x, y = fx * 400, fy * 500
-    if mirrored:
-        x = 400 - x
-    x = 400 - x  # undo the outer mirror: now in the original drawing's coordinates
-    ox, oy = OT_GRIP_ORIGIN
-    c, s = math.cos(OT_GRIP_ANGLE), math.sin(OT_GRIP_ANGLE)
-    dx, dy = x - ox, y - oy
-    gx, gy = c * dx + s * dy, -s * dx + c * dy
-    if math.hypot(gx - OT_BUMP[0], gy - OT_BUMP[1]) > OT_BUMP_RADIUS:
-        return [fx, fy]
-    gx = 2 - gx
-    x, y = ox + c * gx - s * gy, oy + s * gx + c * gy
-    x = 400 - x
-    if mirrored:
-        x = 400 - x
-    return [round(min(1, max(0, x / 400)), 4), round(min(1, max(0, y / 500)), 4)]
-
-
-def _migrate_ot_drawing(dev, move):
-    for key, mirrored in (("draw:evo-ot-side", False), ("draw:evo-ot-side-l", True)):
-        for k, (fx, fy) in list(dev["pins"].get(key, {}).items()):
-            dev["pins"][key][k] = move(fx, fy, mirrored)
-    return dev
-
-
-# Before layout version 5 the SCG grip head drawing was a left-hand grip (red button bottom-right);
-# version 5 mirrors it, so its pins (and those of its "-l" mirror) are mirrored too.
-def _migrate_scg_head(dev):
-    for key in ("draw:evo-scg-head", "draw:evo-scg-head-l"):
-        for k, (fx, fy) in list(dev["pins"].get(key, {}).items()):
-            dev["pins"][key][k] = [round(1 - fx, 4), fy]
-    return dev
-
-
 def normalize_layout(lay):
-    """Validate a whole layout (version 7: one section per role); older versions are converted:
-    versions 1/2 become the stick's section, whole-stick grip pins move with the grip (before 6)
-    and with its thumb-side bump (before 7), and SCG grip head pins are mirrored (before 5)."""
+    """Validate a whole layout (version 7: one section per role). A file from before version 7
+    (October 2026) is loaded as it is when it has per-role sections (version 3 on; pins on the
+    Omni Throttle and SCG grip head drawings may need dragging into place); versions 1/2 are
+    refused. The GET handler keeps a copy of any older file first."""
     if not isinstance(lay, dict):
         raise ValueError("layout must be an object")
-    old = lay.get("version", 1)
-    if old < 3 and "devices" not in lay:
-        lay = {"version": 3, "devices": {"stick": normalize_device_layout(lay, old < 2),
-                                         "throttle": default_device_layout("throttle")}}
     devs = lay.get("devices")
     if not isinstance(devs, dict) or not set(devs) <= set(ROLES):
-        raise ValueError("layout 'devices' must be an object with stick / throttle sections")
+        raise ValueError("layout 'devices' must be an object with stick / throttle sections "
+                         "(stick maps from before the two-stick update aren't supported any more)")
     out = {}
     for r in ROLES:
         try:
@@ -306,13 +212,6 @@ def normalize_layout(lay):
     names = [v["image"] for d in out.values() for v in d["views"] if v["image"]]
     if len(names) != len(set(names)):
         raise ValueError("a photo can belong to one view only")
-    if old < 6:
-        move = _mirror_ot_grip_pin if old < 4 else _flip_ot_grip_pin
-        out = {r: _migrate_ot_drawing(d, move) for r, d in out.items()}
-    if old < 5:
-        out = {r: _migrate_scg_head(d) for r, d in out.items()}
-    if old < 7:
-        out = {r: _migrate_ot_drawing(d, _move_ot_bump_pin) for r, d in out.items()}
     return {"version": 7, "devices": out}
 
 
@@ -320,8 +219,8 @@ def layout_images(lay):
     return {v["image"] for d in lay["devices"].values() for v in d["views"] if v["image"]}
 
 
-def normalize_device_layout(lay, v1=False):
-    """One role's section (or a whole version 1/2 layout; v1=True converts version 1)."""
+def normalize_device_layout(lay):
+    """One role's section."""
     if not isinstance(lay, dict) or not isinstance(lay.get("views"), list) or not lay["views"]:
         raise ValueError("layout needs a non-empty 'views' list")
     if len(lay["views"]) > 8:
@@ -338,10 +237,7 @@ def normalize_device_layout(lay, v1=False):
         ids.add(v["id"])
         views.append({"id": v["id"], "name": name, "schematic": sch, "image": img})
 
-    if v1 or "clusters" in lay:
-        raw_pins, raw_hats = _migrate_v1(lay, views)
-    else:
-        raw_pins, raw_hats = lay.get("pins") or {}, lay.get("hats") or []
+    raw_pins, raw_hats = lay.get("pins") or {}, lay.get("hats") or []
 
     if not isinstance(raw_hats, list) or len(raw_hats) > 32:
         raise ValueError("hats must be a list of at most 32")
@@ -375,13 +271,13 @@ def normalize_device_layout(lay, v1=False):
             if key.startswith("c:"):
                 if key[2:] not in hat_ids:
                     continue  # position of a deleted hat
-            elif key == "hat":
+            elif key in ("hat", "hat2", "hat3", "hat4"):
                 pass
             elif key.isdigit() and 1 <= int(key) <= 128:
                 if int(key) in hat_buttons:
                     continue  # a button is drawn as part of its hat, never as its own pin
             else:
-                raise ValueError(f"pin {key!r}: must be a button number, 'hat' or 'c:<hat id>'")
+                raise ValueError(f"pin {key!r}: must be a button number, 'hat', 'hat2'-'hat4' or 'c:<hat id>'")
             clean[key] = _xy(xy, f"pin {key!r}")
         if clean:
             pins[pk] = clean
@@ -400,7 +296,7 @@ def normalize_device_layout(lay, v1=False):
 
 
 def backup_layout(old_version):
-    """Keep the file as it was before a format conversion (once per old version)."""
+    """Keep a copy of a layout file older than the current format (once per old version)."""
     bak = f"{State.layout_path()}.bak-v{old_version}"
     if not os.path.exists(bak):
         with State.lock:
@@ -571,10 +467,11 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/layout":
             try:
                 raw = json.load(open(State.layout_path()))
+                old = raw.get("version", 1) if isinstance(raw, dict) else None
+                if isinstance(old, int) and old < 7:
+                    backup_layout(old)  # before saving over it, whether or not it loads
                 lay = normalize_layout(raw)
                 err = None
-                if isinstance(raw, dict) and raw.get("version", 1) < lay["version"]:
-                    backup_layout(raw.get("version", 1))
             except FileNotFoundError:
                 lay, err = default_layout(), None
             except (OSError, ValueError) as e:
@@ -688,9 +585,6 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/pulse":
                 daemon_command({"cmd": "pulse", "role": role, "button": int(body.get("button"))})
                 return self._send(200, {"ok": True})
-            if path == "/api/expose":
-                r = daemon_command({"cmd": "expose", "role": role, "on": bool(body.get("on"))}, want_result=True)
-                return self._send(200 if r["ok"] else 400, {"ok": r["ok"], "error": r.get("error")})
             if path == "/api/select":
                 dev = body.get("device")
                 if dev is not None and not isinstance(dev, str):
@@ -839,12 +733,7 @@ def print_status():
 
 
 def cli_mode(role, mode):
-    try:
-        r = daemon_command({"cmd": "mode", "role": role, "mode": mode}, want_result=True)
-    except PermissionError:
-        sys.exit("no access to the vkb-hotas daemon: VKB_HOTAS_USER in /etc/default/vkb-hotas must be you")
-    except OSError as e:
-        sys.exit(f"vkb-hotas daemon not reachable ({e}); is the service running?")
+    r = daemon_command({"cmd": "mode", "role": role, "mode": mode}, want_result=True)
     if not r["ok"]:
         sys.exit(f"vkb-hotas: {r['error']}")
     print_status()

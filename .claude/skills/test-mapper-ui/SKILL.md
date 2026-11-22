@@ -16,6 +16,7 @@ port, so tests can't touch `~/.config/vkb-hotas` or the user's running mapper.
 ```bash
 S=.claude/skills/test-mapper-ui/scripts/test_stack.sh
 $S start [--button-count 32] [--layout ~/.config/vkb-hotas/layout.json] [--sweep] [--throttle 231d:3201] [--twin]
+        [--model extreme3d|multihat] [--fresh]
 $S press 17          # simulated press (held 0.6 s) on the stick role's stick; also hat:up|down|left|right
 $S press 17 1        # ... on simulated stick 1 (the left one): cross-mapping, throttle role
 $S unplug 1 / plug 1 # unplug / replug a simulated stick
@@ -28,7 +29,15 @@ VKB_HOTAS_CTL=$XDG_RUNTIME_DIR/vkb-hotas-dev/ctl.sock mapper/vkb-mapper.py --exp
   unix sockets and `$XDG_RUNTIME_DIR`.
 
 - **`--layout`** copies a file into the test dir. Use a copy of the user's real layout to test
-  format migrations on realistic data; the original is never touched.
+  on realistic data; the original is never touched.
+- **`--model`** replaces simulated stick 0 (the stick role's) with a non-VKB layout: `extreme3d`
+  (Logitech Extreme 3D Pro, `046d:c215`: throttle on `ABS_THROTTLE`, 12 buttons, one hat) or
+  `multihat` (made-up `1209:0001`: four hats `hat:`/`hat2:`…`hat4:`, `ABS_RUDDER` twist, 24
+  buttons). Press its extra hats with `$S press hat3:up`. Use them to check that nothing assumes
+  a VKB. **`--fresh`** starts without a mapping file, to see the first-run defaults fitted to
+  the stick (Slider ← `ABS_THROTTLE` on the Extreme 3D).
+- **`--button-count`** (default 32) seeds the test dir's `mapping.json` with the built-in profile
+  at that T.16000M button count, unless `--mapping` gives one.
 - **`--sweep`** makes the axes move continuously. Leave it off (the default) for stable
   screenshots, and for axis "Learn", which would otherwise grab whichever axis moves first.
 - **`start` refuses** to continue if the mapper handed over to another instance instead of
@@ -156,7 +165,7 @@ example, press a button and check `out.b` has the mapped bit set, or send
   - a version mismatch makes the page read-only with the restart message: copy an older
     `mapper/vkb-mapper.py` (`git show <rev>:...`) plus its `vkb_common.py` into a temp dir with
     the *new* page, start it on 8765, and confirm `mapping.json` is untouched after edits;
-  - an old-format layout converts on load;
+  - a layout older than format 7 is backed up (`layout.json.bak-v<N>`) before anything is saved;
   - the server rejects bad input (curl the API with the token).
 
 ## Cleanup

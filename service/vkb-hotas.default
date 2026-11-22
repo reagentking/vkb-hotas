@@ -25,11 +25,7 @@ VKB_HOTAS_XBOX=""
 # ~USER/.config/vkb-hotas/mapping.json). install.sh fills in the sudo caller.
 VKB_HOTAS_USER=""
 
-# Extra daemon arguments (see: /usr/local/lib/vkb-hotas/vkb-hotas.py --help).
-# Axis/button options here only set the built-in default T.16000M profile: once
-# you save a mapping in vkb-mapper, the mapping file's active profile takes
-# precedence. Examples:
-#VKB_HOTAS_ARGS="--button-count 32"
-#VKB_HOTAS_ARGS="--button-count 32 --invert SLIDER"
-#VKB_HOTAS_ARGS="--axis SLIDER=ABS_RX --axis RZ=ABS_Z"
+# Extra daemon arguments, for troubleshooting (see: /usr/local/lib/vkb-hotas/vkb-hotas.py --help).
+# Buttons and axes are set in HOTAS Mapper, not here. Example:
+#VKB_HOTAS_ARGS="--verbose"
 VKB_HOTAS_ARGS=""

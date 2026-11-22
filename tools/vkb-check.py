@@ -25,7 +25,7 @@ import socket
 # vkb_common lives in ../common in the repo and next to this file once installed
 _here = os.path.dirname(os.path.realpath(__file__))
 sys.path[:0] = [_here, os.path.join(os.path.dirname(_here), "common")]
-from vkb_common import (CONFIG, EMULATED_IDS, EMULATED_NAMES, ROLES, UHID_PHYS, XBOX_ID, XBOX_NAME,
+from vkb_common import (CONFIG, EMULATED_IDS, EMULATED_NAMES, ROLES, SELECTOR, UHID_PHYS, XBOX_ID, XBOX_NAME,
                         load_mapping, mapping_path, parse_match, role_modes, role_selectors)
 
 if sys.stdout.isatty():
@@ -72,7 +72,7 @@ def configured_roles(stick_override=None):
                  for r, v in hello["roles"].items()}
     else:
         sel, modes = role_selectors(), role_modes()
-        roles = {r: (sel[r] if (sel[r] or r == "stick") else None, modes[r] == "real", modes[r]) for r in ROLES}
+        roles = {r: (sel[r] if SELECTOR.match(sel[r]) else None, modes[r] == "real", modes[r]) for r in ROLES}
     if stick_override is not None:
         roles["stick"] = (stick_override, *roles["stick"][1:])
     return roles
@@ -114,9 +114,8 @@ def host_checks(stick_override):
         real = [h for h in hid_devices(vid, pid) if not any(f":{v:04X}:{p:04X}." in h for v, p in EMU_IDS)]
         if "@" in sel:
             real = real[:1] if len(real) > 1 else real  # sysfs can't tell ports apart here; show one
-        label = sel or "any VKB stick"
         if not real:
-            print(f"  [{WARN}] {r}: real stick {label} not connected")
+            print(f"  [{WARN}] {r}: real stick {sel} not connected")
         for h in real:
             print(f"{INFO}{r}: {hid_name(h)} ({os.path.basename(h)})"
                   + ("  EXPOSED to games (vkb-mapper --hide " + r + " to undo)" if exposed else
@@ -342,8 +341,10 @@ def newest_log():
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("log", nargs="?", help="Proton log to analyse (default: newest steam-*.log)")
-    ap.add_argument("--device", default=None, help="real stick VID[:PID] for the stick role (default: from the daemon/config)")
+    ap.add_argument("--device", default=None, help="real stick VID:PID for the stick role (default: from the daemon/config)")
     args = ap.parse_args()
+    if args.device is not None and not SELECTOR.match(args.device):
+        sys.exit(f"--device must be VID:PID or VID:PID@port, got {args.device!r}")
     roles = configured_roles(args.device)
     if args.log:
         analyse(args.log, roles)

@@ -8,7 +8,7 @@ NXT EVO Omni Throttles: a right-hand one (231d:3200) and a left-hand one (231d:3
 an assumed product id). There is no uhid, grabbing or udev hiding; device selection
 and exposing are saved to DIR/config instead of /etc/default/vkb-hotas.
 
-  dev/fake-daemon.py [--dir DIR] [--still] [--sticks 1|2] [--twin] [--throttle SEL] [--button-count 16|32]
+  dev/fake-daemon.py [--dir DIR] [--still] [--sticks 1|2] [--twin] [--throttle SEL] [--model vkb|extreme3d|multihat]
 
 Then, in another terminal, point the mapper at it:
 
@@ -18,6 +18,7 @@ Simulation commands on the control socket, which the real daemon doesn't accept:
 
   {"cmd": "fake_press", "source": 17}                      button 17 on the stick role's stick
   {"cmd": "fake_press", "source": "hat:left", "stick": 1}  hat on simulated stick 1 (the left one)
+  {"cmd": "fake_press", "source": "hat3:up"}               hat 3 (--model multihat has four)
   {"cmd": "fake_plug", "stick": 1, "on": false}            unplug / plug a simulated stick
   dev/fake-daemon.py --press 17 [--stick 1] [--dir DIR]     one-shot client for fake_press
   dev/fake-daemon.py --unplug 1 / --plug 1 [--dir DIR]      one-shot client for fake_plug
@@ -52,19 +53,42 @@ class AbsInfo:
         self.value, self.min, self.max = value, minimum, maximum
 
 
+# Simulated stick models (--model, for stick 0). "vkb" is the real VKBsim Gladiator EVO OT; the
+# others test non-VKB layouts: a Logitech Extreme 3D Pro (throttle on ABS_THROTTLE, twist on RZ,
+# 12 buttons, one hat) and a made-up stick with four hats (ABS_HAT0-3) and no ABS_Z.
+HATS = [(E.ABS_HAT0X, AbsInfo(0, 1, -1)), (E.ABS_HAT0Y, AbsInfo(0, 1, -1))]
+MODELS = {
+    "vkb": {"vendor": 0x231D, "name": "VKB-Sim (C) Alex Oz 2023  VKBsim Gladiator EVO OT {hand}  (SIMULATED)",
+            "axes": [(E.ABS_X, AbsInfo(2048, 4095)), (E.ABS_Y, AbsInfo(2048, 4095)), (E.ABS_Z, AbsInfo(1571, 2047)),
+                     (E.ABS_RX, AbsInfo(2048, 4095)), (E.ABS_RY, AbsInfo(2048, 4095)), (E.ABS_RZ, AbsInfo(1024, 2047)), *HATS]},
+    "extreme3d": {"vendor": 0x046D, "product": 0xC215, "buttons": 12,
+                  "name": "Logitech Logitech Extreme 3D pro  (SIMULATED)",
+                  "axes": [(E.ABS_X, AbsInfo(512, 1023)), (E.ABS_Y, AbsInfo(512, 1023)), (E.ABS_RZ, AbsInfo(128, 255)),
+                           (E.ABS_THROTTLE, AbsInfo(255, 255)), *HATS]},
+    "multihat": {"vendor": 0x1209, "product": 0x0001, "buttons": 24, "name": "Four-hat test stick  (SIMULATED)",
+                 "axes": [(E.ABS_X, AbsInfo(32768, 65535)), (E.ABS_Y, AbsInfo(32768, 65535)),
+                          (E.ABS_RUDDER, AbsInfo(32768, 65535)), (E.ABS_THROTTLE, AbsInfo(0, 65535)),
+                          *[(getattr(E, f"ABS_HAT{i}{xy}"), AbsInfo(0, 1, -1)) for i in range(4) for xy in "XY"]]},
+}
+
+
 class FakeStick:
-    """Same capabilities as the real VKBsim Gladiator EVO OT R: 6 axes, 1 hat, 79 buttons.
-    Events are queued by inject() and read through a pipe, so the daemon can poll() it."""
+    """A simulated stick (MODELS; by default the real VKBsim Gladiator EVO OT: 6 axes, 1 hat, 79
+    buttons). Events are queued by inject() and read through a pipe, so the daemon can poll() it."""
 
     class _Info:
         def __init__(self, vendor, product):
             self.vendor, self.product = vendor, product
 
-    def __init__(self, n, product, hand, buttons=79, port=None):
+    def __init__(self, n, product, hand, buttons=79, port=None, model="vkb"):
+        m = MODELS[model]
+        self.model = model
         self.path = f"/dev/input/sim{n}"
-        self.name = f"VKB-Sim (C) Alex Oz 2023  VKBsim Gladiator EVO OT {hand}  (SIMULATED)"
+        self.name = m["name"].format(hand=hand)
         self.phys = f"{port or f'usb-sim-{n}'}/input0"
-        self.info = self._Info(0x231D, product)
+        self.info = self._Info(m["vendor"], m.get("product", product))
+        self.axes = m["axes"]
+        buttons = m.get("buttons", buttons)
         self.keys = [0x120 + i for i in range(min(buttons, 16))] + [0x2C0 + i for i in range(max(0, buttons - 16))]
         self.fd, self._w = os.pipe()
         os.set_blocking(self.fd, False)
@@ -74,11 +98,7 @@ class FakeStick:
         self.down, self.values = set(), {}
 
     def capabilities(self, absinfo=False):
-        return {E.EV_ABS: [(E.ABS_X, AbsInfo(2048, 4095)), (E.ABS_Y, AbsInfo(2048, 4095)),
-                           (E.ABS_Z, AbsInfo(1571, 2047)), (E.ABS_RX, AbsInfo(2048, 4095)),
-                           (E.ABS_RY, AbsInfo(2048, 4095)), (E.ABS_RZ, AbsInfo(1024, 2047)),
-                           (E.ABS_HAT0X, AbsInfo(0, 1, -1)), (E.ABS_HAT0Y, AbsInfo(0, 1, -1))],
-                E.EV_KEY: list(self.keys)}
+        return {E.EV_ABS: list(self.axes), E.EV_KEY: list(self.keys)}
 
     def inject(self, *events):
         for e in events:  # kept for active_keys()/absinfo(), what the daemon re-reads after SYN_DROPPED
@@ -194,9 +214,10 @@ def main():
     ap.add_argument("--sticks", type=int, choices=(1, 2), default=2, help="simulated sticks: right OT, plus a left OT")
     ap.add_argument("--twin", action="store_true", help="give both sticks the same VID:PID (tests @port selectors)")
     ap.add_argument("--throttle", default=None, help="initial throttle selector, e.g. 231d:3201 (default: none)")
-    ap.add_argument("--buttons", type=int, default=79, help="physical button count to simulate")
-    ap.add_argument("--button-count", type=int, choices=(16, 32), default=16,
-                    help="T.16000M buttons in the no-mapping-file default profile (like VKB_HOTAS_ARGS)")
+    ap.add_argument("--buttons", type=int, default=79, help="physical button count to simulate (VKB model)")
+    ap.add_argument("--model", choices=sorted(MODELS), default="vkb",
+                    help="simulated stick 0: the right VKB Omni Throttle (default), a Logitech Extreme 3D Pro "
+                         "(046d:c215), or a made-up stick with four hats (1209:0001)")
     ap.add_argument("--hold", type=float, default=0.6, help="seconds a simulated press is held")
     ap.add_argument("--press", metavar="SOURCE", help="client mode: press a button number or hat:<dir> on a running fake daemon")
     ap.add_argument("--stick", type=int, default=None, help="with --press: simulated stick index (default: the stick role's)")
@@ -217,12 +238,12 @@ def main():
         return
 
     os.makedirs(args.dir, exist_ok=True)
-    sticks = [FakeStick(0, 0x3200, "R", args.buttons)]
+    sticks = [FakeStick(0, 0x3200, "R", args.buttons, model=args.model)]
     if args.sticks == 2:
         sticks.append(FakeStick(1, 0x3200 if args.twin else 0x3201, "L", args.buttons))
     config = os.path.join(args.dir, "config")
     cfg = vkb_common.read_config(config)
-    selectors = {"stick": cfg.get("VKB_HOTAS_DEVICE") or "231d:3200",
+    selectors = {"stick": cfg.get("VKB_HOTAS_DEVICE") or vkb_common.vidpid(sticks[0]),
                  "throttle": cfg.get("VKB_HOTAS_THROTTLE", args.throttle or "") or ""}
     if args.twin and "@" not in selectors["stick"]:
         selectors["stick"] = "231d:3200@usb-sim-0"
@@ -233,7 +254,6 @@ def main():
                       watcher=v.MappingWatcher(os.path.join(args.dir, "mapping.json"), os.getuid()),
                       source=FakeSource(sticks), make_uhid=FakeUhid, hider=None,
                       persist=lambda updates: vkb_common.write_config(updates, config),
-                      fallback=v.default_profile(args.button_count),
                       logger=lambda *a: print(*a, flush=True))
     held, t0 = {}, time.monotonic()
 
@@ -252,9 +272,9 @@ def main():
         if isinstance(source, int) and 1 <= source <= len(order):
             s.inject(ev(E.EV_KEY, order[source - 1], 1))
             held[(id(s), "key", order[source - 1])] = (s, now + args.hold)
-        elif isinstance(source, str) and source[4:] in v.HAT_DIRS:
-            d = source[4:]
-            code = E.ABS_HAT0X if d in ("left", "right") else E.ABS_HAT0Y
+        elif isinstance(source, str) and vkb_common.HAT_SOURCE.fullmatch(source):
+            num, d = vkb_common.HAT_SOURCE.fullmatch(source).groups()
+            code = getattr(E, f"ABS_HAT{int(num or 1) - 1}{'X' if d in ('left', 'right') else 'Y'}")
             s.inject(ev(E.EV_ABS, code, -1 if d in ("left", "up") else 1))
             held[(id(s), "hat", code)] = (s, now + args.hold)
         else:
@@ -288,10 +308,10 @@ def main():
         if not args.still:
             t = now - t0
             if sticks[0].plugged:
-                sticks[0].inject(ev(E.EV_ABS, E.ABS_X, int(2048 + 1500 * math.sin(t * 1.3))),
-                                 ev(E.EV_ABS, E.ABS_Y, int(2048 + 1200 * math.sin(t * 0.9 + 1))),
-                                 ev(E.EV_ABS, E.ABS_RZ, int(1024 + 600 * math.sin(t * 0.6))),
-                                 ev(E.EV_ABS, E.ABS_Z, int(1024 + 1000 * math.sin(t * 0.25))))
+                waves = {E.ABS_X: (1.3, 0), E.ABS_Y: (0.9, 1), E.ABS_RZ: (0.6, 0), E.ABS_RUDDER: (0.6, 0),
+                         E.ABS_Z: (0.25, 0), E.ABS_THROTTLE: (0.25, 0)}
+                sticks[0].inject(*[ev(E.EV_ABS, c, int(ai.min + (ai.max - ai.min) * (0.5 + 0.4 * math.sin(t * waves[c][0] + waves[c][1]))))
+                                   for c, ai in sticks[0].axes if c in waves])
             if len(sticks) > 1 and sticks[1].plugged:
                 sticks[1].inject(ev(E.EV_ABS, E.ABS_Z, int(1024 + 1000 * math.sin(t * 0.2 + 2))),
                                  ev(E.EV_ABS, E.ABS_RX, int(2048 + 1500 * math.sin(t * 0.7))))

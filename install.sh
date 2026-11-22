@@ -89,7 +89,7 @@ if [[ -z $device ]]; then
     # --pick, as long as there is someone to ask
     ask=""
     if [[ -t 0 && -t 1 ]]; then
-        if [[ $pick || -z $device || $device != *:* ]] || ! connected "$device"; then ask=1; fi
+        if [[ $pick || ! $device =~ $selector_re ]] || ! connected "$device"; then ask=1; fi
     fi
     if [[ $ask ]]; then
         picked=$(mktemp)
@@ -115,14 +115,14 @@ if rest:
         sys.exit("cancelled")
 open(out, "w").write(f"{stick}\n{thr}\n")' "$picked" "$device" "$throttle" < /dev/tty || { rm -f "$picked"; exit 1; }
         { read -r device; read -r throttle; } < "$picked"; rm -f "$picked"
-    elif [[ -z $device || $device != *:* ]]; then
-        # no terminal (or a legacy vendor-only value): autodetect, as before
+    elif [[ ! $device =~ $selector_re ]]; then
+        # no terminal to ask: take the only connected VKB stick
         device=$(py -c '
-import sys
-from vkb_common import find_one, vidpid
-d = find_one(sys.argv[1])
-print(vidpid(d) if d else "")' "$device") || exit 1
-        [[ -n $device ]] || die "no VKB stick found; plug it in or pass --device VID:PID (see --list)"
+from vkb_common import VKB_VENDOR, list_sticks, selector_for
+sticks = list_sticks()
+vkb = [d for d in sticks if d.info.vendor == VKB_VENDOR]
+print(selector_for(vkb[0], sticks) if len(vkb) == 1 else "")')
+        [[ -n $device ]] || die "no single VKB stick found; pass --device VID:PID (see --list)"
     fi
 fi
 device=${device,,} throttle=${throttle,,}
@@ -143,6 +143,23 @@ else
 fi
 py -c 'import sys; from vkb_common import write_config; write_config(dict(a.split("=", 1) for a in sys.argv[2:]), sys.argv[1])' \
     "$conf" "VKB_HOTAS_DEVICE=$device" "VKB_HOTAS_THROTTLE=$throttle" "VKB_HOTAS_USER=$user"
+# The daemon's mapping options (--axis, --invert, --buttons, --button-count) were removed in
+# 2026-11: HOTAS Mapper sets all of that. Drop them from VKB_HOTAS_ARGS, or the service won't start.
+py -c '
+import shlex, sys
+from vkb_common import read_config, write_config
+old = shlex.split(read_config(sys.argv[1]).get("VKB_HOTAS_ARGS", ""))
+keep, dropped, i = [], [], 0
+while i < len(old):
+    a = old[i].split("=", 1)[0]
+    if a in ("--axis", "--invert", "--buttons", "--button-count"):
+        n = 1 if "=" in old[i] else 2
+        dropped += old[i:i + n]; i += n
+    else:
+        keep.append(old[i]); i += 1
+if dropped:
+    write_config({"VKB_HOTAS_ARGS": " ".join(keep)}, sys.argv[1])
+    print("removed from VKB_HOTAS_ARGS (set buttons and axes in HOTAS Mapper instead):", " ".join(dropped))' "$conf"
 
 install -Dm755 "$here/service/vkb-hotas.py"  "$lib/vkb-hotas.py"
 install -Dm644 "$here/common/vkb_common.py" "$lib/vkb_common.py"
@@ -182,6 +199,6 @@ The service starts automatically whenever a joystick is plugged in.
   1. Restart Steam so it lets go of the real stick(s).
   2. As your user, configure game prefixes:  ./tools/proton-setup.py
   3. Remap buttons/axes, or switch sticks:  vkb-mapper   (or "HOTAS Mapper" in your app menu)
-Give games the real stick instead:  vkb-mapper --expose stick|throttle|all   (undo: --hide)
+Switch what games see from the HOTAS tray icon, or:  vkb-mapper --expose|--xbox|--hide stick|throttle|all
 Stop the service entirely:  sudo systemctl stop vkb-hotas
 MSG

@@ -4,7 +4,7 @@ set -uo pipefail
 [[ $EUID -eq 0 ]] || { echo "run as root: sudo $0"; exit 1; }
 systemctl stop vkb-hotas.service 2>/dev/null
 rm -f /etc/udev/rules.d/72-vkb-hotas.rules /etc/systemd/system/vkb-hotas.service \
-      /etc/modules-load.d/vkb-hotas.conf /run/vkb-hotas/active \
+      /etc/modules-load.d/vkb-hotas.conf \
       /run/udev/rules.d/72-vkb-hotas-hide.rules \
       /usr/local/bin/vkb-mapper /usr/local/share/applications/vkb-mapper.desktop \
       /usr/local/bin/vkb-tray /usr/local/share/applications/vkb-tray.desktop /etc/xdg/autostart/vkb-tray.desktop \

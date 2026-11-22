@@ -21,7 +21,6 @@ MODES = ("virtual", "xbox", "real")
 ROLE_CONFIG = {"stick": "VKB_HOTAS_DEVICE", "throttle": "VKB_HOTAS_THROTTLE"}
 EMULATED_IDS = {"stick": (0x044F, 0xB10A), "throttle": (0x044F, 0xB687)}
 EMULATED_NAMES = {"stick": "Thrustmaster T.16000M", "throttle": "Thrustmaster TWCS Throttle"}
-EMULATED = EMULATED_IDS["stick"]
 ROLE_AXES = {"stick": ("X", "Y", "RZ", "SLIDER"),
              "throttle": ("X", "Y", "Z", "RX", "RY", "RZ", "SLIDER")}
 ROLE_BUTTON_COUNTS = {"stick": (16, 32), "throttle": (14, 32)}  # first = faithful to the real device
@@ -31,9 +30,14 @@ ROLE_DEFAULT_AXES = {
     "stick": {"X": "ABS_X", "Y": "ABS_Y", "RZ": "ABS_RZ", "SLIDER": "ABS_Z"},
     "throttle": {"Z": "ABS_Z", "X": "ABS_RX", "Y": "ABS_RY", "RZ": "ABS_RZ"},
 }
-EMU_AXES = ROLE_AXES["stick"]
-DEFAULT_AXES = ROLE_DEFAULT_AXES["stick"]
 HAT_DIRS = ("up", "down", "left", "right")
+# A stick's hats: hat 1 is evdev ABS_HAT0X/Y (sources "hat:<dir>"), hats 2-4 are ABS_HAT1-3
+# (sources "hat2:<dir>" ... "hat4:<dir>"). VKB reports its extra hats as buttons; other sticks
+# may use these axes.
+HAT_SOURCE = re.compile(r"hat([234])?:(up|down|left|right)")
+# When a stick lacks a default axis, the first of these it has stands in (a Logitech Extreme 3D
+# reports its throttle as ABS_THROTTLE, not ABS_Z); a default axis it lacks entirely stays unmapped.
+AXIS_ALTERNATIVES = {"ABS_Z": ("ABS_THROTTLE",), "ABS_RZ": ("ABS_RUDDER",)}
 
 # The virtual Xbox 360 controller (uinput, laid out like the kernel's xpad driver), for games that
 # support pads but not flight sticks. One pad, fed by every stick in "xbox" mode. Its mapping is
@@ -112,21 +116,16 @@ def mode_config(modes):
 #   "231d:3200"                         VID:PID (any port)
 #   "231d:3200@usb-0000:18:00.3-2.1"    VID:PID on one USB port (needed only when two
 #                                       connected sticks report the same VID:PID)
-#   "231d" / ""                         legacy: any product of that vendor / any VKB device
-#   "/dev/input/eventN"                 legacy: one evdev node
+# "" means no stick (the throttle role's "none"). Anything else is refused.
 SELECTOR = re.compile(r"^[0-9a-f]{4}:[0-9a-f]{4}(@[A-Za-z0-9:._/-]{1,80})?$")
 
 
 def parse_match(spec):
-    """'231d:3200' -> (0x231d, 0x3200); '231d' -> (0x231d, None); '' -> VKB vendor, any product.
-    A trailing '@port' is ignored here (see port_of)."""
-    spec = (spec or "").split("@", 1)[0]
-    if not spec:
-        return VKB_VENDOR, None
-    parts = spec.lower().replace("0x", "").split(":")
-    vid = int(parts[0], 16)
-    pid = int(parts[1], 16) if len(parts) > 1 and parts[1] else None
-    return vid, pid
+    """'231d:3200' or '231d:3200@port' -> (0x231d, 0x3200). The port is ignored here (see port_of)."""
+    if not SELECTOR.match(spec or ""):
+        raise ValueError(f"not a stick selector (VID:PID or VID:PID@port): {spec!r}")
+    vid, pid = spec.split("@", 1)[0].split(":")
+    return int(vid, 16), int(pid, 16)
 
 
 def port_of(dev):
@@ -175,15 +174,12 @@ def selector_for(dev, others):
 
 
 def matches(spec, dev):
-    if spec.startswith("/dev/"):
-        return os.path.realpath(spec) == os.path.realpath(dev.path)
     vid, pid = parse_match(spec)
     port = spec.split("@", 1)[1] if "@" in spec else None
-    return (dev.info.vendor == vid and (pid is None or dev.info.product == pid)
-            and (port is None or port_of(dev) == port))
+    return dev.info.vendor == vid and dev.info.product == pid and (port is None or port_of(dev) == port)
 
 
-def find_devices(spec="", sticks=None):
+def find_devices(spec, sticks=None):
     """Sticks matching a selector. Closes the others when it opened them itself."""
     own = sticks is None
     sticks = list_sticks() if own else sticks
@@ -193,23 +189,6 @@ def find_devices(spec="", sticks=None):
             if d not in found:
                 d.close()
     return found
-
-
-def find_one(spec=""):
-    """Exactly one matching device, or raise SystemExit with a helpful message."""
-    devs = find_devices(spec)
-    if len(devs) == 1:
-        return devs[0]
-    if not devs:
-        return None
-    listing = "\n".join(f"  {selector_for(d, devs):40}  {d.name.strip()}" for d in devs)
-    raise SystemExit(f"several matching sticks found; pick one with --device SELECTOR "
-                     f"(or {ROLE_CONFIG['stick']} in {CONFIG}):\n{listing}")
-
-
-def default_match():
-    """--device default: $VKB_HOTAS_DEVICE, then the config file, then any VKB device."""
-    return role_selectors()["stick"]
 
 
 # ---- Mapping profiles ---------------------------------------------------------
@@ -230,9 +209,9 @@ def default_match():
 #       "reference": "ac8-default"}}                 # optional: game defaults shown in HOTAS Mapper
 # }
 # A source is a physical button number (1-based, in Linux/VKBDevCfg order) or a physical
-# hat direction "hat:up|down|left|right" on the role's own stick, or the same prefixed with
-# the other role ("throttle:5", "stick:hat:left") for a control on the other stick. Axis
-# sources work the same way ("ABS_Z", "throttle:ABS_Z").
+# hat direction "hat:up|down|left|right" (hat 1; "hat2:up" ... "hat4:up" for hats 2-4) on the
+# role's own stick, or the same prefixed with the other role ("throttle:5", "stick:hat:left")
+# for a control on the other stick. Axis sources work the same way ("ABS_Z", "throttle:ABS_Z").
 # Version 1 had a single stick profile at the top level; it becomes the "stick" section.
 MAPPING_MAX_BYTES = 1 << 20
 
@@ -241,12 +220,21 @@ def mapping_path(home=None):
     return os.path.join(home or os.path.expanduser("~"), ".config", "vkb-hotas", "mapping.json")
 
 
-def default_role_profile(role, button_count=None, axes=None, invert=()):
+def fit_axis(src, available):
+    """A default axis source, fitted to the axes a stick has (None = unknown stick: unchanged)."""
+    if src is None or available is None or src in available:
+        return src
+    return next((a for a in AXIS_ALTERNATIVES.get(src, ()) if a in available), None)
+
+
+def default_role_profile(role, button_count=None, available=None):
+    """The default section for a role; `available` (the stick's axis names, if known) fits its
+    axis sources to that stick."""
     count = button_count or ROLE_BUTTON_COUNTS[role][0]
-    axes = ROLE_DEFAULT_AXES[role] if axes is None else axes
+    axes = {a: fit_axis(src, available) for a, src in ROLE_DEFAULT_AXES[role].items()}
     return {
         "button_count": count,
-        "axes": {a: {"src": axes.get(a), "invert": a in invert, "deadzone": 0} for a in ROLE_AXES[role]},
+        "axes": {a: {"src": axes.get(a), "invert": False, "deadzone": 0} for a in ROLE_AXES[role]},
         "buttons": {str(i): [i] for i in range(1, count + 1)},
         "hat": {d: [f"hat:{d}"] for d in HAT_DIRS},
         "labels": {},
@@ -267,20 +255,25 @@ XBOX_DEFAULT_AXES = {"LX": ("ABS_X", None), "LY": ("ABS_Y", None), "RX": ("ABS_R
 XBOX_DEFAULT_BUTTONS = {"A": 1, "B": 2, "X": 3, "Y": 4, "LB": 5, "RB": 6, "BACK": 7, "START": 8, "LS": 9, "RS": 10}
 
 
-def default_xbox_profile():
+def default_xbox_profile(available=None):
+    """`available`: the XBOX_HOME stick's axis names, if known (see default_role_profile)."""
     return {
-        "axes": {a: {"src": s, "invert": False, "deadzone": 0, "half": h} for a, (s, h) in XBOX_DEFAULT_AXES.items()},
+        "axes": {a: {"src": fit_axis(s, available), "invert": False, "deadzone": 0, "half": h}
+                 for a, (s, h) in XBOX_DEFAULT_AXES.items()},
         "buttons": {b: [XBOX_DEFAULT_BUTTONS[b]] if b in XBOX_DEFAULT_BUTTONS else [] for b in XBOX_BUTTONS},
         "hat": {d: [f"hat:{d}"] for d in HAT_DIRS},
         "labels": {},
     }
 
 
-def default_profile(button_count=None, axes=None, invert=()):
-    """A whole profile; the arguments shape the stick section (they come from VKB_HOTAS_ARGS)."""
-    return {"stick": default_role_profile("stick", button_count, axes, invert),
-            "throttle": default_role_profile("throttle"),
-            "xbox": default_xbox_profile()}
+def default_profile(axes=None):
+    """The built-in profile, used until a mapping is saved in HOTAS Mapper. `axes` ({role: axis
+    names of its connected stick}) fits the default axis sources to those sticks; the daemon and
+    HOTAS Mapper both pass what's connected, so they agree."""
+    axes = axes or {}
+    return {"stick": default_role_profile("stick", available=axes.get("stick")),
+            "throttle": default_role_profile("throttle", available=axes.get("throttle")),
+            "xbox": default_xbox_profile(axes.get(XBOX_HOME))}
 
 
 def split_source(role, s):
@@ -297,9 +290,9 @@ def _source(role, s, where):
     if isinstance(local, bool):
         raise ValueError(f"{where}: bad source {s!r}")
     if not ((isinstance(local, int) and 1 <= local <= 128)
-            or (isinstance(local, str) and local.startswith("hat:") and local[4:] in HAT_DIRS)):
-        raise ValueError(f"{where}: bad source {s!r} (button 1-128 or hat:up/down/left/right, "
-                         f"optionally prefixed with stick: or throttle:)")
+            or (isinstance(local, str) and HAT_SOURCE.fullmatch(local))):
+        raise ValueError(f"{where}: bad source {s!r} (button 1-128, or hat:up/down/left/right, hat2:up ... "
+                         f"hat4:right, optionally prefixed with stick: or throttle:)")
     return local if src_role == role else f"{src_role}:{local}"
 
 

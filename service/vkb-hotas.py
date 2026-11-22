@@ -52,7 +52,7 @@ from evdev import ecodes as E
 _here = os.path.dirname(os.path.realpath(__file__))
 sys.path[:0] = [_here, os.path.join(os.path.dirname(_here), "common")]
 from vkb_common import (CONFIG, EMULATED_IDS, EMULATED_NAMES, HAT_DIRS, MODES, ROLE_AXES,  # noqa: E402
-                        ROLE_CONFIG, ROLE_DEFAULT_AXES, ROLES, SELECTOR, UHID_PHYS, XBOX_AXES,
+                        ROLE_CONFIG, ROLES, SELECTOR, UHID_PHYS, XBOX_AXES,
                         XBOX_BUTTONS, XBOX_HOME, XBOX_ID, XBOX_NAME, XBOX_TRIGGERS, default_profile,
                         default_role_profile, default_xbox_profile, list_sticks, load_mapping,
                         mapping_path, matches, mode_config, port_of, role_modes, role_selectors,
@@ -191,6 +191,8 @@ def make_spec(role, n):
 HAT = {(0, -1): 0, (1, -1): 1, (1, 0): 2, (1, 1): 3,
        (0, 1): 4, (-1, 1): 5, (-1, 0): 6, (-1, -1): 7, (0, 0): 8}
 HAT_XY = {v: k for k, v in HAT.items()}
+# evdev hat axes -> (hat number, 0 = x / 1 = y); hat 1 is ABS_HAT0, hats 2-4 are ABS_HAT1-3
+HAT_AXES = {getattr(E, f"ABS_HAT{i}{xy}"): (i + 1, j) for i in range(4) for j, xy in enumerate("XY")}
 
 # ---- Emulated device: Xbox 360 controller (uinput, the kernel xpad driver's layout) --------
 XBOX_KEYS = {"A": E.BTN_SOUTH, "B": E.BTN_EAST, "X": E.BTN_NORTH, "Y": E.BTN_WEST, "LB": E.BTN_TL,
@@ -288,8 +290,10 @@ class PhysState:
 
     def __init__(self, dev):
         abs_caps = dict(dev.capabilities(absinfo=True).get(E.EV_ABS, []))
-        self.absinfo = {c: ai for c, ai in abs_caps.items() if not E.ABS_HAT0X <= c <= E.ABS_HAT3Y}
-        self.hat_codes = {c for c in abs_caps if c in (E.ABS_HAT0X, E.ABS_HAT0Y)}
+        self.absinfo = {c: ai for c, ai in abs_caps.items() if c not in HAT_AXES}
+        self.hat_codes = {c for c in abs_caps if c in HAT_AXES}
+        # hat number -> [x, y]; hat 1 always (neutral if the stick has none), hats 2-4 if present
+        self.hats = {1: [0, 0], **{HAT_AXES[c][0]: [0, 0] for c in self.hat_codes}}
         # Physical button numbers follow Linux joystick order, which matches the
         # HID button numbers VKBDevCfg shows (for the first 80 or so buttons).
         self.btn_num = {code: i + 1 for i, code in enumerate(sorted(dev.capabilities().get(E.EV_KEY, [])))}
@@ -297,7 +301,6 @@ class PhysState:
         self.pressed = set()
         self.down_at = {}   # button -> time.monotonic() of its press
         self.stages = {}    # stage-1 button -> (stage-2 button, delay in s); see vkb_common._stages
-        self.hat = [0, 0]
         self.name = dev.name.strip()
         self.id = vidpid(dev)
 
@@ -306,10 +309,9 @@ class PhysState:
         if ev.type == E.EV_ABS:
             if ev.code in self.raw:
                 self.raw[ev.code] = ev.value
-            elif ev.code == E.ABS_HAT0X:
-                self.hat[0] = ev.value
-            elif ev.code == E.ABS_HAT0Y:
-                self.hat[1] = ev.value
+            elif ev.code in self.hat_codes:
+                n, j = HAT_AXES[ev.code]
+                self.hats[n][j] = ev.value
             else:
                 return False
             return True
@@ -333,7 +335,11 @@ class PhysState:
             self.down_at[n] = now
         for c in self.raw:
             self.raw[c] = dev.absinfo(c).value
-        self.hat = [dev.absinfo(c).value if c in self.hat_codes else 0 for c in (E.ABS_HAT0X, E.ABS_HAT0Y)]
+        for n in self.hats:
+            self.hats[n] = [0, 0]
+        for c in self.hat_codes:
+            n, j = HAT_AXES[c]
+            self.hats[n][j] = dev.absinfo(c).value
 
     def active(self, src, now):
         if isinstance(src, int):
@@ -345,9 +351,10 @@ class PhysState:
                 if second in self.pressed or (delay and now - self.down_at.get(src, 0) < delay):
                     return False
             return True
-        d = src[4:]
-        return ((d == "up" and self.hat[1] < 0) or (d == "down" and self.hat[1] > 0)
-                or (d == "left" and self.hat[0] < 0) or (d == "right" and self.hat[0] > 0))
+        num, _, d = src.partition(":")  # "hat:up" (hat 1) or "hat2:up" ... "hat4:up"
+        x, y = self.hats.get(int(num[3:] or 1), (0, 0))
+        return ((d == "up" and y < 0) or (d == "down" and y > 0)
+                or (d == "left" and x < 0) or (d == "right" and x > 0))
 
     def pending(self, now):
         """Seconds until a held stage 1 outlasts its delay (None if nothing is waiting)."""
@@ -363,12 +370,23 @@ class PhysState:
             return None
         return (self.raw[code] - ai.min) / max(1, ai.max - ai.min)
 
+    def axis_names(self):
+        return {abs_name(c) for c in self.absinfo}
+
     def info(self):
-        return {"name": self.name, "id": self.id, "buttons": len(self.btn_num),
-                "axes": [{"name": E.ABS[c], "min": ai.min, "max": ai.max} for c, ai in self.absinfo.items()]}
+        return {"name": self.name, "id": self.id, "buttons": len(self.btn_num), "hats": sorted(self.hats),
+                "axes": [{"name": abs_name(c), "min": ai.min, "max": ai.max} for c, ai in self.absinfo.items()]}
 
     def raw_msg(self):
-        return {"b": sorted(self.pressed), "h": self.hat, "a": {E.ABS[c]: v for c, v in self.raw.items()}}
+        """b: pressed buttons; h: hat 1's [x, y]; hx: hats 2-4 {"2": [x, y]} (only those present)."""
+        return {"b": sorted(self.pressed), "h": self.hats[1], "a": {abs_name(c): v for c, v in self.raw.items()},
+                **({"hx": {str(n): xy for n, xy in self.hats.items() if n > 1}} if len(self.hats) > 1 else {})}
+
+
+def abs_name(code):
+    """evdev's name for an axis code (one name, even where evdev lists aliases)."""
+    n = E.ABS.get(code, f"ABS_{code:#x}")
+    return n[0] if isinstance(n, list) else n
 
 
 class Mapper:
@@ -690,7 +708,6 @@ class Hider:
     before hiding (STATE, also read by --cleanup after a crash) and set back afterwards."""
     RULES = "/run/udev/rules.d/72-vkb-hotas-hide.rules"
     STATE = "/run/vkb-hotas/hidden.json"
-    OLD_FLAG = "/run/vkb-hotas/active"  # used by versions before roles
     FALLBACK_MODE = 0o660               # input and hidraw nodes' usual mode
 
     def __init__(self):
@@ -706,8 +723,8 @@ class Hider:
 
     @staticmethod
     def identity(selector):
-        """(vid, pid, ID_PATH glob or None) for a "VID:PID[@port]" selector; None if it can't be matched
-        exactly (vague legacy selectors keep only the node-name lines, with their reconnect gap).
+        """(vid, pid, ID_PATH glob or None) for a "VID:PID[@port]" selector; None for a port udev
+        names differently (that stick keeps only its node-name lines, with their reconnect gap).
         The port is the evdev phys ("usb-0000:18:00.3-2.1"); udev's ID_PATH for the same stick is
         "pci-0000:18:00.3-usb-0:2.1:1.0"."""
         if not selector or not SELECTOR.match(selector):
@@ -804,11 +821,10 @@ class Hider:
             log("could not save the hidden-node record:", e)
 
     def _remove_rules(self):
-        for f in (self.RULES, self.OLD_FLAG):
-            try:
-                os.unlink(f)
-            except FileNotFoundError:
-                pass
+        try:
+            os.unlink(self.RULES)
+        except FileNotFoundError:
+            pass
 
     @classmethod
     def cleanup(cls):
@@ -818,7 +834,7 @@ class Hider:
             state = json.load(open(cls.STATE))
         except (OSError, ValueError):
             state = {}
-        if not state and not any(os.path.exists(f) for f in (cls.RULES, cls.OLD_FLAG)):
+        if not state and not os.path.exists(cls.RULES):
             return
         h = cls()
         h._remove_rules()
@@ -838,8 +854,7 @@ class Hider:
 class Role:
     def __init__(self, name, selector, mode):
         self.name = name
-        # the stick role is always configured ("" = any VKB stick); the throttle is optional
-        self.selector = selector if (selector or name == "stick") else None
+        self.selector = selector or None  # VID:PID[@port]; None = not used (throttle only, normally)
         self.mode = mode      # "virtual" (Thrustmaster device), "xbox" (feeds the pad) or "real"
         self.dev = None       # open evdev device while attached
         self.phys = None      # PhysState while attached
@@ -864,9 +879,13 @@ class Daemon:
     SCAN_EVERY = 1.0
 
     def __init__(self, selectors, modes, *, ctl, watcher=None, source=None, make_uhid=None, make_pad=None,
-                 hider=None, persist=None, fallback=None, grab=True, logger=log):
-        if not isinstance(modes, dict):  # a set of exposed roles, as before modes
-            modes = {r: "real" if r in modes else "virtual" for r in ROLES}
+                 hider=None, persist=None, grab=True, logger=log):
+        self.log = logger
+        for r in ROLES:
+            if selectors.get(r) and not SELECTOR.match(selectors[r]):
+                self.log(f"{r}: ignoring {ROLE_CONFIG[r]}={selectors[r]!r}: not VID:PID or VID:PID@port "
+                         "(pick the stick in HOTAS Mapper or run sudo ./install.sh --pick)")
+                selectors = {**selectors, r: None}
         self.roles = {r: Role(r, selectors.get(r), modes.get(r, "virtual")) for r in ROLES}
         self.pad_mapper = XboxMapper()
         self.pad = None                 # the XboxPad while any stick is in "xbox" mode
@@ -877,9 +896,8 @@ class Daemon:
         self.make_uhid = make_uhid or Uhid
         self.hider = hider
         self.persist = persist          # callable(dict) writing the config file, or None
-        self.fallback = fallback or default_profile()
+        self.fallback = default_profile()  # until a mapping file exists; fitted to the sticks (_refit_fallback)
         self.grab = grab
-        self.log = logger
         self.profile_name = "built-in default"
         self.devices = []               # connected sticks offered for selection
         self.stop = False
@@ -915,11 +933,7 @@ class Daemon:
         for role in self.roles.values():
             if role.dev is not None or role.selector is None:
                 continue
-            others = [o.selector for o in self.roles.values() if o is not role and o.selector]  # skips ""
             cands = [d for d in devs if d.path not in busy and matches(role.selector, d)]
-            # a vague selector ("" / vendor only) never takes a stick another role names exactly
-            specific = [d for d in cands if not any(":" in s and matches(s, d) for s in others)]
-            cands = specific or cands
             if len(cands) > 1 and role.warned != role.selector:
                 self.log(f"{role.name}: {len(cands)} sticks match {role.selector!r}; using the first "
                          f"(add @port to tell them apart)")
@@ -951,10 +965,18 @@ class Daemon:
             self._grab(role, True)
             self._ensure_uhid(role)
         self._update_pad()
-        if role.name == "stick" and self.profile_name == "built-in default":
-            self._apply(self.fallback)  # --buttons needs the stick's button numbering
+        self._refit_fallback()
         self._update_hiding()
         self.send_hello()
+
+    def _refit_fallback(self):
+        """The built-in default's axes follow the connected sticks (e.g. a throttle on ABS_THROTTLE),
+        the same way HOTAS Mapper's first mapping does (both from vkb_common.default_profile)."""
+        fb = default_profile({r: role.phys.axis_names() for r, role in self.roles.items() if role.phys})
+        if fb != self.fallback:
+            self.fallback = fb
+            if self.profile_name == "built-in default":
+                self._apply(fb)
 
     def detach(self, role, why):
         if role.dev is None:
@@ -965,6 +987,7 @@ class Daemon:
         role.dev = role.phys = None
         role.nodes = {}
         role.last = None
+        self._refit_fallback()
         self._update_hiding()
         self.send_hello()
 
@@ -1103,10 +1126,6 @@ class Daemon:
         self._update_idle()
         self.send_hello()
 
-    def expose(self, role_name, on):
-        """Give a role's real stick to games, or take it back to its Thrustmaster device."""
-        self.set_mode(role_name, "real" if on else "virtual")
-
     def set_mode(self, role_name, mode):
         """What games see of a role's stick: "virtual" (Thrustmaster device), "xbox" (the shared
         Xbox pad) or "real" (the stick untouched: not grabbed or hidden, no virtual device)."""
@@ -1162,8 +1181,6 @@ class Daemon:
         try:
             if c == "select":
                 self.select(cmd.get("role"), cmd.get("device"))
-            elif c == "expose":
-                self.expose(cmd.get("role"), bool(cmd.get("on")))
             elif c == "mode":
                 self.set_mode(cmd.get("role"), cmd.get("mode"))
             else:
@@ -1349,20 +1366,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sel = role_selectors()
     ap.add_argument("--device", default=sel["stick"],
-                    help="real stick for the T.16000M: VID:PID[@port], VID (any product) or /dev/input/eventN "
-                         "(default: $VKB_HOTAS_DEVICE, else the only VKB device present)")
+                    help="real stick for the T.16000M, as VID:PID[@port] (default: $VKB_HOTAS_DEVICE)")
     ap.add_argument("--throttle", default=sel["throttle"],
                     help="real stick for the TWCS Throttle, as VID:PID[@port] (default: $VKB_HOTAS_THROTTLE; empty = none)")
     ap.add_argument("--user", default=os.environ.get("VKB_HOTAS_USER", ""),
                     help="desktop user who owns the control socket and ~/.config/vkb-hotas/mapping.json "
                          "(default: $VKB_HOTAS_USER)")
     ap.add_argument("--mapping", help="mapping file (default: ~USER/.config/vkb-hotas/mapping.json)")
-    ap.add_argument("--axis", action="append", default=[], metavar="DST=ABS_SRC",
-                    help="default-profile T.16000M axis source, e.g. SLIDER=ABS_RX (used when there is no mapping file)")
-    ap.add_argument("--invert", action="append", default=[], metavar="DST", help="default-profile axis inversion")
-    ap.add_argument("--buttons", help="default-profile source buttons (codes/names) for T.16000M buttons 1..N")
-    ap.add_argument("--button-count", type=int, choices=(16, 32), default=16,
-                    help="default-profile T.16000M buttons: 16 = faithful, 32 = also pass buttons 17-32")
     ap.add_argument("--no-hide", action="store_true", help="don't hide the real sticks from games")
     ap.add_argument("--no-grab", action="store_true", help="don't EVIOCGRAB the real sticks")
     ap.add_argument("--verbose", action="store_true", help="log every open/close of the virtual devices")
@@ -1386,36 +1396,21 @@ def main():
             log(f"user {args.user!r} not found; control socket will be root-only")
     path = args.mapping or (mapping_path(home) if home else None)
 
-    axis_map = dict(ROLE_DEFAULT_AXES["stick"])
-    for a in args.axis:
-        k, v = a.split("=", 1)
-        axis_map[k.upper()] = v.upper()
-    fallback = default_profile(args.button_count, axis_map, [i.upper() for i in args.invert])
     Hider.cleanup()  # a previous instance may have crashed
     ctl = ControlServer(uid)
     daemon = Daemon({"stick": args.device, "throttle": args.throttle}, role_modes(), ctl=ctl,
-                    watcher=MappingWatcher(path, uid) if path else None, fallback=fallback,
+                    watcher=MappingWatcher(path, uid) if path else None,
                     hider=None if args.no_hide else Hider(), grab=not args.no_grab,
                     make_uhid=lambda spec: Uhid(spec, args.verbose),
                     persist=lambda updates: write_config(updates, CONFIG))
-    if args.buttons:
-        codes = [int(b, 0) if b[0].isdigit() else E.ecodes[b] for b in args.buttons.split(",")]
-        orig_attach = daemon.attach
-
-        def attach(role, dev):  # map --buttons codes to this stick's physical button numbers
-            if role.name == "stick":
-                nums = PhysState(dev).btn_num
-                fallback["stick"]["buttons"] = {str(i + 1): [nums[c]] for i, c in enumerate(codes[:args.button_count])
-                                                if c in nums}
-            orig_attach(role, dev)
-        daemon.attach = attach
-
     shown = {"virtual": lambda r: EMULATED_NAMES[r], "xbox": lambda r: f"{XBOX_NAME} ({r})",
              "real": lambda r: f"real {r} stick"}
     log(f"emulating {', '.join(shown[daemon.roles[r].mode](r) for r in ROLES if daemon.roles[r].selector is not None)}; "
         f"mapping file: {path or 'none'}")
+    if daemon.roles["stick"].selector is None:
+        log("no stick configured (VKB_HOTAS_DEVICE); run sudo ./install.sh, or set it in HOTAS Mapper")
     if not daemon.wait_for_sticks(args.wait):
-        wanted = ", ".join(f"{r}={s.selector or 'any VKB stick'}" for r, s in daemon.roles.items() if s.selector is not None)
+        wanted = ", ".join(f"{r}={s.selector}" for r, s in daemon.roles.items() if s.selector is not None) or "none"
         log(f"no configured stick connected ({wanted}); nothing to do")
         daemon.shutdown()
         return 0

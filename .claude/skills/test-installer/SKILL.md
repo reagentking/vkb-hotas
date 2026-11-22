@@ -14,6 +14,7 @@ where it fails, mid-install, on their system. Check it first in a sandbox.
 ```bash
 .claude/skills/test-installer/scripts/sandbox_install.sh            # default: --device 231d:3200 --throttle 231d:3201@usb-... --user $USER
 .claude/skills/test-installer/scripts/sandbox_install.sh --keep ... # keep the sandbox for inspection
+SANDBOX_CONFIG=old.conf .claude/skills/test-installer/scripts/sandbox_install.sh   # upgrade from an existing /etc/default/vkb-hotas
 ```
 
 **Run it outside Claude Code's Bash sandbox** (`dangerouslyDisableSandbox: true`). The sandbox

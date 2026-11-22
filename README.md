@@ -35,13 +35,14 @@ returns to normal.
 |---|---|
 | VKB Gladiator NXT EVO Omni Throttle (R), `231d:3200` | axes, hat, 32 buttons verified through the virtual stick |
 | Star Wars: Squadrons (Proton Experimental) | game acquires and polls the stick |
-| Ace Combat 8 (Proton Hotfix) | game acquires and polls the stick; shows controller button icons; flight not yet confirmed |
+| Ace Combat 8 (Proton Hotfix) | flown with both sticks (T.16000M + TWCS); no rebinding in game, so remap in HOTAS Mapper; shows controller button icons regardless |
+| MechWarrior 5 (Proton) | works with both sticks |
 | Project Wingman (Proton Experimental) | game opens the stick and receives input; bind controls in the game's binding menu (click a binding, then move the axis or press the button) |
-| Second stick as TWCS Throttle | VKB Gladiator NXT EVO Omni Throttle (L), `231d:3201`: live: hidden and re-created as the TWCS, Y as its throttle, the right stick's lever handed off; Xbox triggers verified through the daemon's code; not yet in games |
+| Second stick as TWCS Throttle | VKB Gladiator NXT EVO Omni Throttle (L), `231d:3201`, Y as its throttle: works in Ace Combat 8 and MechWarrior 5 |
 | Xbox controller mode | virtual pad recognised by SDL as an Xbox 360 controller; not yet in a game |
 
-Other VKB models should work after adjusting axes in HOTAS Mapper (or with `--axis`, see [Mapping](#mapping)).
-Reports from other sticks and games are welcome.
+Other sticks work too (see [Not a VKB?](#not-a-vkb)); they've been tested with simulated
+layouts, not yet with real hardware. Reports from other sticks and games are welcome.
 
 ## Requirements
 
@@ -71,7 +72,7 @@ sudo ./install.sh --device 231d:3200 --throttle 231d:3201   # or name them (any 
 The installer asks which stick games should see as the T.16000M, then which
 (if any) as the TWCS Throttle. It asks when nothing is configured yet, when the
 configured stick isn't plugged in, or with `--pick`; otherwise a re-install keeps
-your choice. Without a terminal it autodetects a single VKB stick, as before.
+your choice. Without a terminal it takes the only connected VKB stick.
 Sticks are named by `VID:PID`; if two connected sticks report the same one (two
 identical models), the USB port is added, e.g. `231d:3200@usb-0000:18:00.3-2.1`,
 so keep each in its port. You can switch sticks later in HOTAS Mapper without
@@ -103,6 +104,28 @@ PROTON_ENABLE_HIDRAW=0x044F/0xB10A,0x044F/0xB687 %command%
 
 (The second id is the TWCS Throttle; it does no harm without one. Older setups
 with only `0x044F/0xB10A` keep working for the T.16000M.)
+
+### Not a VKB?
+
+Nothing here needs a VKB stick; it's just what this was built with. With any other joystick:
+
+1. **Install:** `sudo ./install.sh` lists every connected joystick; pick yours (and an optional
+   second one for the TWCS Throttle). Without a terminal, pass `--device VID:PID` (see `--list`).
+2. **Axes:** the first mapping follows your stick's axes: X/Y, twist (`ABS_RZ`, or `ABS_RUDDER`)
+   and throttle (`ABS_Z`, or `ABS_THROTTLE` as on a Logitech Extreme 3D). Check them in HOTAS
+   Mapper by moving each control: the left panel shows the live axes, and an axis row's
+   **Learn** picks whichever axis you move. An axis your stick doesn't have shows **— none —**
+   and rests at the centre.
+3. **Buttons and hats:** buttons are numbered in the order Linux reports them, and buttons 1–16
+   pass through 1:1 (set the T.16000M to 32 buttons for more). Up to four hats are shown and can
+   be assigned like buttons (`HAT`, `HAT2` …).
+4. **Stick map:** a new one starts with generic grip and base outlines. Add photos of your own
+   stick with **Photo…** and place pins on them.
+5. **Proton setup** is the same as for everyone: `proton-setup.py` for each game, plus the
+   launch options above.
+
+If you also own a real Thrustmaster T.16000M or TWCS, games will see two of them (see
+[Limitations](#limitations)).
 
 ## Verify
 
@@ -143,7 +166,7 @@ each tab has its own panels:
   **Games see: Virtual | Xbox pad | Real stick** switch at the top of the stick panel (also in
   **Devices**) changes it, the same as `vkb-mapper --hide/--xbox/--expose` (see
   [Everyday use](#everyday-use)).
-- **Your stick:** live axes, hat and every physical button. Pressed buttons light up, and
+- **Your stick:** live axes, hats (up to four) and every physical button. Pressed buttons light up, and
   each one is tagged with the emulated control it drives (on either device).
 - **What the game sees:** the emulated device's buttons, hat directions and axes.
   - **Assign**, then press a button or hat direction on *either* stick. A source on the
@@ -173,24 +196,25 @@ each tab has its own panels:
   versa). Click **Place pins**, press a button on the stick, then click where it is (drag to adjust,
   × to remove). Zoom with the mouse wheel or the −/+ buttons (up to 8×) and drag to pan; pins
   keep their size on screen, so small hats are easy to hit, and **FIT** shows the whole picture.
-  The default views are drawings of the Gladiator NXT EVO Omni Throttle (whole stick, SCG grip
-  head, triggers in side profile, base front), mirrored for the throttle stick. A **Straight
-  stick** drawing (same grip, no Omni Throttle angle) is available for each hand, plus a
-  **Thrustmaster TWCS Throttle** in two views (thumb side with the hats, and front with the
-  mini-stick, rocker switch, wheel and rudder paddle) for throttles that aren't Omni Throttles,
-  and generic outlines for other sticks. Each real stick has its own stick map.
-  **Built-in photos:** the same dropdown also has real photos of the VKB Gladiator NXT EVO
-  Omni Throttle, right and left hand, each from the front, trigger side, thumb side and logo
-  side. When the real stick is a VKB Gladiator, a new stick map starts with these photos (the
-  right- or left-hand set, from the stick's id or name) instead of the drawings. Picking a photo
-  places pins for the author's button numbering (VKBDevCfg setups differ, so press each control
-  to check its pin lights up, then drag or × to fix). 5-way hat pins attach to your own hats
-  with the same buttons; a new map gets them once you've set up the hats and pick the photo.
+  Each real stick has its own stick map. What a new one starts with depends on the stick:
+  - **VKB Gladiator NXT EVO Omni Throttle:** built-in photos of the right- or left-hand stick
+    (from its id or name), from the front, trigger side, thumb side and logo side.
+  - **Other VKB sticks:** drawings of the Gladiator NXT EVO Omni Throttle (whole stick, SCG grip
+    head, triggers in side profile, base front), mirrored for the throttle stick.
+  - **Anything else:** generic grip and base outlines.
+
+  The dropdown next to **Photo…** offers all of them for any view, plus a **Straight stick**
+  drawing (same grip, no Omni Throttle angle) for each hand and a **Thrustmaster TWCS Throttle**
+  in two views (thumb side with the hats; front with the mini-stick, rocker switch, wheel and
+  rudder paddle). The built-in photos come with pins for the author's button numbering. VKB
+  button numbering depends on grip and firmware profile, so press each control to check its pin
+  lights up, then drag or × to fix it. 5-way hat pins attach to your own hats with the same
+  buttons; a new map gets them once you've set up the hats and pick the photo. Drawings start
+  without pins.
   **Pins belong to the picture**: each drawing and each photo keeps its own pins, so changing a
   view's drawing shows that drawing's pins and changing back restores the old ones. Add your own
   views, and swap any drawing for a photo of your stick with **Photo…** (PNG/JPEG/WebP, up to
-  10 MB). VKB button numbering depends on grip and firmware profile, so pins are placed by you
-  rather than pre-filled.
+  10 MB).
 - **5-way hats:** VKB's 4-way hats with center push report as five separate buttons. Click
   **+ 5-way hat**, name it, push up, right, down and left, press it in (or choose "No center
   push"), then click where it is. To show the same hat on another drawing, use **Place pins** and
@@ -237,19 +261,16 @@ with the game closed.
 
 The mapper talks to the daemon over `/run/vkb-hotas/ctl.sock`, which only the
 user in `VKB_HOTAS_USER` can open (the installer sets it to whoever ran
-`sudo`). The web UI listens on 127.0.0.1 only, needs a per-session token, and
-exits about 45 s after its last tab closes.
+`sudo`). HOTAS Mapper's server listens on 127.0.0.1 only and needs a per-session token.
+Closing the window stops it; in browser mode it exits about 45 s after its last tab closes.
 
-After updating (re-running `sudo ./install.sh`), close HOTAS Mapper and reopen it once it
-has exited. An older mapper still running would serve the new page, so the page detects
-that and saves nothing until you restart. Mappings and stick maps from before the
-two-stick update are converted on load: they become the Stick's, and the Throttle starts
-from defaults. The Omni Throttle and SCG grip head drawings were corrected (the right-hand ones were drawn
-the left-hand way, and vice versa: tilt, red button, thumb-stick bump); pins already placed on
-them are moved along with them, and
-the old `layout.json` is kept as `layout.json.bak-v<old version>`. Stick maps keep their views and drawings: pick a new drawing per view from the
-dropdown next to **Photo…**, or add a view with **+ View** (e.g. one using "SCG grip side
-(triggers)").
+After updating (re-running `sudo ./install.sh`), close HOTAS Mapper and reopen it. An older
+mapper still running would serve the new page, so the page detects that and saves nothing
+until you restart. Updates never change an existing stick map's views: pick a different
+picture per view from the dropdown next to **Photo…**, or add one with **+ View**. Stick maps
+from before October 2026 are loaded as they are (pins on the Omni Throttle drawings may need
+dragging into place; ones from before the two-stick update start fresh), and the old file
+is kept as `layout.json.bak-v<old version>`.
 
 ## Xbox controller mode
 
@@ -305,45 +326,35 @@ VKB_HOTAS_THROTTLE="231d:3201"      # optional stick -> TWCS Throttle ("" = none
 VKB_HOTAS_EXPOSE=""                 # roles given to games untouched: stick, throttle
 VKB_HOTAS_XBOX=""                   # roles feeding the virtual Xbox controller instead
 VKB_HOTAS_USER="yourname"
-VKB_HOTAS_ARGS="--button-count 32 --invert SLIDER"
+VKB_HOTAS_ARGS=""                   # extra daemon options, for troubleshooting
 ```
 
 (The comments above are for this README only; in the real file, comments go on their own lines.)
 The installer and HOTAS Mapper write the device lines, and `vkb-mapper --expose/--xbox/--hide`
 (or the **Games see** switch) writes `VKB_HOTAS_EXPOSE` and `VKB_HOTAS_XBOX`.
 
-The axis/button options in `VKB_HOTAS_ARGS` define the built-in default
-T.16000M profile. Once you save a mapping in HOTAS Mapper, its active profile takes
-precedence, and the mapper's first-run defaults are taken from these options.
+Buttons, axes and button counts are set in HOTAS Mapper, not here. Until you save a
+mapping there, the daemon uses the built-in default. (Older versions took `--axis`,
+`--invert`, `--buttons` and `--button-count` here; the installer removes them.)
 
-Apply hand edits with `sudo systemctl restart vkb-hotas`. Nothing needs a re-install:
-the udev rule no longer depends on the device.
+Apply hand edits with `sudo systemctl restart vkb-hotas`. Nothing needs a re-install.
 
-| Option | Meaning |
+| Option for `VKB_HOTAS_ARGS` | Meaning |
 |---|---|
-| `--button-count 16\|32` | 16 = like a real T.16000M (default). 32 also passes buttons 17–32. |
-| `--axis DST=ABS_SRC` | map an emulated axis (`X`, `Y`, `RZ`, `SLIDER`) to a source axis |
-| `--invert DST` | invert an emulated axis (e.g. a backwards throttle) |
-| `--buttons A,B,...` | choose which source buttons become emulated buttons 1..N |
 | `--verbose` | log every open/close of the virtual devices |
+| `--no-hide` | don't hide the real sticks from your session |
+| `--no-grab` | don't grab the real sticks exclusively |
 
 ### Mapping
 
 The default mapping suits Gladiator NXT EVO bases:
 `X←ABS_X, Y←ABS_Y, RZ←ABS_RZ (twist), SLIDER←ABS_Z (Omni Throttle lever)`.
-If a source axis doesn't exist, the emulated axis is held at neutral.
-
-To find your stick's axes, give it to yourself for a minute (so the real stick is
-visible to you) and record yourself moving every control:
-
-```bash
-vkb-mapper --expose stick           # or: throttle
-./tools/vkb-learn.py 60             # --role throttle for the throttle stick
-vkb-mapper --hide stick
-```
-
-It reports which axes spring back to centre and which hold position (a
-throttle), plus button numbers above 16.
+Until you save a mapping, these follow the connected stick: a stick without `ABS_Z` gets its
+`ABS_THROTTLE` as the throttle, one without `ABS_RZ` its `ABS_RUDDER` as the twist, and any
+other axis it lacks is left unmapped (held at neutral). New profiles start the same way. To check
+or change them, open HOTAS Mapper: the left panel shows its live axes, and an axis row's **Learn** picks
+whichever axis you move. Its buttons appear in the physical grid as you press them; set
+the T.16000M to 32 buttons to pass buttons 17–32 through.
 
 ## Everyday use
 
@@ -375,13 +386,11 @@ throttle), plus button numbers above 16.
   is remembered across restarts. Its buttons still feed the other virtual device if you
   cross-mapped them.
 - If a stick is unplugged and plugged back in (or its USB hub resets) while a game is running,
-  it stays hidden from the game; the virtual devices stay put meanwhile. (Before November 2026
-  there was a second or two in which a running game could grab the real stick; restart the game
-  if controls stop working after a reconnect with an older version.)
+  it stays hidden from the game, and the virtual devices stay put meanwhile.
 - `sudo systemctl stop vkb-hotas` turns everything off and gives the real sticks back to your
   session (even after a crash); `start` turns it back on. Plugging in any joystick also starts
-  it. (Before October 2026 a stop could leave the sticks' event/js nodes blocked; replug them
-  once if a stopped service still hides them, and `./tools/vkb-check.py` flags it.)
+  it. If a stopped service ever still hides a stick, `./tools/vkb-check.py` flags it; replug
+  the stick once.
 - Logs: `journalctl -u vkb-hotas -b`. A line "kernel event buffer overflowed" means some
   stick events were lost before the daemon read them; it re-reads the stick's state right
   away, so no button stays stuck. If a button ever seems held after you let go, check for it.
@@ -416,7 +425,7 @@ throttle stick ┘     ▲              ▲      │    ├─▶ virtual TWCS T
                      │  mapping.json┘      │    └─▶ or: virtual Xbox 360 pad (uinput evdev) ──▶ Wine winebus (SDL) ─▶ XInput ─▶ game
   hidden: runtime udev rule drops uaccess  │ ctl.sock (live state, test presses, device choice, mode)
                                            ▼
-                                     vkb-mapper.py ◀──▶ browser UI
+                                     vkb-mapper.py ◀──▶ HOTAS Mapper (window or browser), tray
 ```
 
 | Path | Purpose |
@@ -425,7 +434,7 @@ throttle stick ┘     ▲              ▲      │    ├─▶ virtual TWCS T
 | `service/` | the root daemon `vkb-hotas.py`, its systemd unit, config template `vkb-hotas.default` and udev rule `72-vkb-hotas.rules` |
 | `mapper/` | HOTAS Mapper: server `vkb-mapper.py`, page `vkb-mapper.html` (standard library only, no build), its window `vkb_mapper_app.py` (GTK4 + WebKitGTK, optional), built-in stick photos `pictures/` (+ `pictures.json` with their default pins), the tray icon `vkb-tray.py` (+ `vkb-tray.desktop`), the app icons `icons/`, game default references `game-defaults.json` and menu entry `vkb-mapper.desktop` |
 | `common/` | `vkb_common.py`: config, roles, device selection, the mapping format and terminal pickers shared by everything |
-| `tools/` | helpers you run as your user: `proton-setup.py` (per-game prefix setup), `vkb-check.py` (setup and Proton-log diagnostics), `vkb-learn.py` (axis discovery) |
+| `tools/` | helpers you run as your user: `proton-setup.py` (per-game prefix setup), `vkb-check.py` (setup and Proton-log diagnostics) |
 | `dev/` | `fake-daemon.py`: the daemon's real event loop with simulated left and right Omni Throttles (and a stand-in Xbox pad), for working on the GUI without root |
 | `CLAUDE.md`, `.claude/skills/` | guidance and workflows for Claude Code sessions: verify an install, test the installer and the mapper UI without root, ship a change, analyse Proton logs |
 

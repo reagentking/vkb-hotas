@@ -5,6 +5,7 @@
 #
 #   sandbox_install.sh [--keep] [install.sh args...]
 #       default args: --device 231d:3200 --throttle 231d:3201@usb-0000:00:14.0-2 --user $USER
+#   SANDBOX_CONFIG=FILE sandbox_install.sh ...   start from an existing /etc/default/vkb-hotas (an upgrade)
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../../.." && pwd)
@@ -26,6 +27,7 @@ sandbox() {  # rewrite a repo script so it runs inside $R; keep it in the repo d
         -e 's#\[\[ \$EUID -eq 0 \]\] ||#true ||#' "$repo/$1" > "$repo/$2"
 }
 fail=0
+[[ -n ${SANDBOX_CONFIG:-} ]] && cp "$SANDBOX_CONFIG" "$R/etc/default/vkb-hotas"
 
 echo "== install.sh ${args[*]}"
 sandbox install.sh .sandbox-install.sh
@@ -49,7 +51,8 @@ done < <(cd "$R" && find usr/local/lib etc/systemd etc/udev usr/local/share -typ
 echo "== generated files"
 rules=$R/etc/udev/rules.d/72-vkb-hotas.rules
 udevadm verify "$rules" >/dev/null 2>&1 && echo "  ok        udev rule verifies" || { echo "  FAIL      udevadm verify"; fail=1; }
-grep -E '^VKB_HOTAS_(DEVICE|THROTTLE|USER)=' "$R/etc/default/vkb-hotas" | sed 's/^/  config    /'
+grep -E '^VKB_HOTAS_(DEVICE|THROTTLE|USER|ARGS)=' "$R/etc/default/vkb-hotas" | sed 's/^/  config    /'
+grep -i 'removed from' "$R/install.out" | sed 's/^/  note      /'
 for k in VKB_HOTAS_DEVICE VKB_HOTAS_THROTTLE VKB_HOTAS_USER; do
     [[ $(grep -c "^$k=" "$R/etc/default/vkb-hotas") == 1 ]] || { echo "  FAIL      config has no single $k line"; fail=1; }
 done

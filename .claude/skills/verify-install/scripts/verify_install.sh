@@ -85,7 +85,7 @@ if os.path.exists(lp):
     try:
         raw = json.load(open(lp))
         lay = m.normalize_layout(raw)
-        conv = " (old format, converted on load)" if raw.get("version", 1) < lay.get("version", 1) else ""
+        conv = " (older format, loaded as is; a copy is kept on first load)" if raw.get("version", 1) < lay.get("version", 1) else ""
         print(f"  layout.json OK{conv}: version {lay.get('version')}")
         for r, dev in (lay["devices"].items() if "devices" in lay else [("stick", lay)]):
             print(f"    {r}:")

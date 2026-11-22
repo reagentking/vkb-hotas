@@ -32,7 +32,7 @@ import time
 # vkb_common lives in ../common in the repo and next to this file once installed
 _here = os.path.dirname(os.path.realpath(__file__))
 sys.path[:0] = [_here, os.path.join(os.path.dirname(_here), "common")]
-from vkb_common import EMULATED_IDS, checklist, parse_match, role_selectors
+from vkb_common import EMULATED_IDS, SELECTOR, checklist, parse_match, role_selectors
 
 DEFAULT_APPS = {"1222730": "STAR WARS: Squadrons", "2288340": "ACE COMBAT 8: WINGS OF THEVE"}
 HIDRAW = "PROTON_ENABLE_HIDRAW=" + ",".join(f"0x{v:04X}/0x{p:04X}" for v, p in EMULATED_IDS.values())
@@ -128,7 +128,7 @@ def set_value(text, key, name, value):
 
 
 def drop_dinput_cache(text, vidpids):
-    alt = "|".join(f"{v:04X}&PID_{p:04X}" if p is not None else f"{v:04X}&PID_[0-9A-F]{{4}}" for v, p in vidpids)
+    alt = "|".join(f"{v:04X}&PID_{p:04X}" for v, p in vidpids)
     pat = re.compile(r"^\[System\\\\CurrentControlSet\\\\Control\\\\MediaProperties\\\\PrivateProperties"
                      r"\\\\DirectInput\\\\VID_(?:" + alt + r")\\\\[^\n]*\n(?:(?!\[)[^\n]*\n)*", re.M | re.I)
     return pat.sub("", text)
@@ -161,7 +161,7 @@ def main():
             print(f"  {appid:>10}  {'set up    ' if is_configured(pfx) else 'not set up'}  {name}")
         return
 
-    vidpids = [parse_match(sel) for sel in role_selectors().values() if sel] or [parse_match("")]
+    vidpids = [parse_match(sel) for sel in role_selectors().values() if SELECTOR.match(sel)]
     vidpids += list(EMULATED_IDS.values())
     setup, undo = [], []
     if args.appids:
