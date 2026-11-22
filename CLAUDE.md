@@ -285,6 +285,21 @@ Keep every tool consistent with this.
   after an unplug, so a stale file must never survive: `--cleanup` (run at startup and as
   `ExecStopPost`, i.e. even after a crash) deletes it, plus the pre-roles flag
   `/run/vkb-hotas/active`, and retriggers input/hidraw.
+- **Hide by identity, not only by node name.** A USB hub reset mid-game (the user's cat bumped the
+  hub; MechWarrior 5 running) re-created both sticks' nodes under new names; the per-node rule
+  didn't cover them, and in the ~2 s before the daemon re-attached and re-hid them, Wine opened the
+  real sticks' hidraw nodes (`bus_create_hid_device … 231d:3200/3201` late in the Proton log).
+  An opened device stays open, so the game had 4 joysticks and the controls stopped working until
+  it was restarted. Now `Daemon._update_hiding` also passes `Hider.identity(selector)` for every
+  configured, non-exposed role (attached or not): the rule gets
+  `KERNEL=="event*|js*|hidraw*", ATTRS{idVendor}=="…", ATTRS{idProduct}=="…", TAG-="uaccess",
+  MODE="0600"` lines, plus `ENV{ID_PATH}=="pci-<pci>-usb-0:<port>:*"` (after an
+  `IMPORT{builtin}="path_id"` line) for `VID:PID@usb-<pci>-<port>` selectors, so udev hides a
+  (re)appearing stick at creation. Vague legacy selectors ("" / vendor only) get no identity
+  line and keep the gap. The node-name lines stay. Check the rule with `udevadm verify`.
+  Verified live: the left stick unplugged and replugged with a watcher polling `/dev` every 5 ms;
+  its new js/hidraw/event nodes were 0600 and not openable from their first moment (its node-name
+  lines had already been dropped at detach, so the identity lines did it).
 - **Un-hiding must also chmod back.** The retrigger re-adds the uaccess ACL entry but only resets
   the mode where a rule sets one: on the user's machine hidraw came back 0660, while event/js
   nodes stayed 0600 with `mask::---`, i.e. still blocked for Steam/SDL/evdev games after

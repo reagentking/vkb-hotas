@@ -374,6 +374,10 @@ throttle), plus button numbers above 16.
   games see only the real one; restart a running game to pick up the change. The choice
   is remembered across restarts. Its buttons still feed the other virtual device if you
   cross-mapped them.
+- If a stick is unplugged and plugged back in (or its USB hub resets) while a game is running,
+  it stays hidden from the game; the virtual devices stay put meanwhile. (Before November 2026
+  there was a second or two in which a running game could grab the real stick; restart the game
+  if controls stop working after a reconnect with an older version.)
 - `sudo systemctl stop vkb-hotas` turns everything off and gives the real sticks back to your
   session (even after a crash); `start` turns it back on. Plugging in any joystick also starts
   it. (Before October 2026 a stop could leave the sticks' event/js nodes blocked; replug them

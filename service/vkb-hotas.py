@@ -36,6 +36,7 @@ import glob
 import json
 import os
 import pwd
+import re
 import select
 import signal
 import socket
@@ -695,6 +696,7 @@ class Hider:
     def __init__(self):
         self.hidden = {}  # /dev node -> sysfs path
         self.modes = {}   # /dev node -> mode to restore
+        self.ids = ()     # (vid, pid, ID_PATH glob or None) of every stick to keep hidden, attached or not
 
     @classmethod
     def _usable(cls, mode):
@@ -702,18 +704,44 @@ class Hider:
         without this fix), not a mode worth restoring."""
         return mode if mode & 0o077 else cls.FALLBACK_MODE
 
-    def apply(self, nodes):
-        if nodes == self.hidden:
+    @staticmethod
+    def identity(selector):
+        """(vid, pid, ID_PATH glob or None) for a "VID:PID[@port]" selector; None if it can't be matched
+        exactly (vague legacy selectors keep only the node-name lines, with their reconnect gap).
+        The port is the evdev phys ("usb-0000:18:00.3-2.1"); udev's ID_PATH for the same stick is
+        "pci-0000:18:00.3-usb-0:2.1:1.0"."""
+        if not selector or not SELECTOR.match(selector):
+            return None
+        vp, _, port = selector.partition("@")
+        vid, pid = vp.split(":")
+        if not port:
+            return (vid, pid, None)
+        m = re.fullmatch(r"usb-([0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-9])-([0-9.]+)", port)
+        return (vid, pid, f"pci-{m[1]}-usb-0:{m[2]}:*") if m else None
+
+    def apply(self, nodes, ids=()):
+        """nodes: {/dev node: sysfs path} of the attached sticks to hide now. ids: identity() of every
+        configured stick to hide, so udev hides it the moment it (re)appears, e.g. after a USB hub
+        reset mid-game; node names alone left a second or two in which a running game (Wine) could
+        open the new nodes and keep them."""
+        ids = tuple(sorted(set(ids)))
+        if nodes == self.hidden and ids == self.ids:
             return
         for n in nodes.keys() - self.hidden.keys():  # record before the rule and chmod touch it
             try:
                 self.modes[n] = self._usable(os.stat(n).st_mode & 0o7777)
             except OSError:
                 pass
-        changed = {**self.hidden, **nodes}
-        if nodes:
+        changed = {**self.hidden, **nodes} if nodes != self.hidden else {}
+        if nodes or ids:
             os.makedirs(os.path.dirname(self.RULES), exist_ok=True)
             lines = ["# vkb-hotas: real sticks currently replaced by virtual ones (written by the daemon)"]
+            for vid, pid, path in ids:  # by identity: also covers nodes that don't exist yet
+                match = f'KERNEL=="event*|js*|hidraw*", ATTRS{{idVendor}}=="{vid}", ATTRS{{idProduct}}=="{pid}"'
+                if path:
+                    lines.append(f'{match}, ENV{{ID_PATH}}!="?*", IMPORT{{builtin}}="path_id"')
+                    match += f', ENV{{ID_PATH}}=="{path}"'
+                lines.append(f'{match}, TAG-="uaccess", MODE="0600"')
             for n in sorted(nodes):
                 k = os.path.basename(n)
                 sub = "hidraw" if k.startswith("hidraw") else "input"
@@ -724,7 +752,8 @@ class Hider:
             os.replace(tmp, self.RULES)
         else:
             self._remove_rules()
-        self._udev(changed.values())
+        if changed or ids != self.ids:
+            self._udev(changed.values())
         for n in nodes:
             try:
                 os.chmod(n, 0o600)  # with POSIX ACLs this zeroes the mask -> uaccess entry inert
@@ -735,7 +764,7 @@ class Hider:
         restored = self._restore(self.hidden.keys() - nodes.keys())
         if restored:
             log("restored permissions of", ", ".join(restored))
-        self.hidden = dict(nodes)
+        self.hidden, self.ids = dict(nodes), ids
         self._save()
 
     @staticmethod
@@ -1011,7 +1040,8 @@ class Daemon:
         for role in self.attached():
             if not role.exposed:
                 nodes.update(role.nodes)
-        self.hider.apply(nodes)
+        ids = [Hider.identity(r.selector) for r in self.roles.values() if r.selector is not None and not r.exposed]
+        self.hider.apply(nodes, [i for i in ids if i])
 
     # -- mapping --
     def _apply(self, profile):
